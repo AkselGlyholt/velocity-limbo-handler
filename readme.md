@@ -1,4 +1,8 @@
 # VelocityLimboHandler
+![maintenance-status](https://img.shields.io/badge/maintenance-passively--maintained-yellowgreen.svg)
+[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-brightgreen)](https://github.com/AkselGlyholt/velocity-limbo-handler/blob/main/LICENSE)
+[![Release Build](https://img.shields.io/badge/Download-latest%20release-brightgreen)](https://github.com/AkselGlyholt/velocity-limbo-handler/releases/latest)
+
 A simple plugin for handling your fallback server.
 
 This is a velocity plugin for standalone Limbo servers under your network.
