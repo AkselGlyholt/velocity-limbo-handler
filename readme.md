@@ -57,6 +57,11 @@ VelocityLimboHandler does not provide a built-in fallback system, so you'll need
 
 ---
 
+## Todo
+* [ ] Priority Queue with permissions
+
+---
+
 ## 📜 License  
 This plugin is open-source under the **GPLv3 License**.  
 
