@@ -102,8 +102,11 @@ public class VelocityLimboHandler {
         EventManager eventManger = proxyServer.getEventManager();
 
         // TODO: make these respect config when config is added with .getServerFromProperty()
-        limboServer = Utility.getServerByName("limbo");
-        directConnectServer = Utility.getServerByName("lobby");
+        String limboName = config.getString(Route.from("limbo-name"));
+        String directConnectName = config.getString(Route.from("direct-connect-server"));
+
+        limboServer = Utility.getServerByName(limboName);
+        directConnectServer = Utility.getServerByName(directConnectName);
 
         // If either server is null, "self-destruct"
         if (limboServer == null || directConnectServer == null) {
