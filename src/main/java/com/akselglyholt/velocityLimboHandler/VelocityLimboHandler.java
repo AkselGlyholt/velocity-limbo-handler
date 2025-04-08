@@ -20,11 +20,13 @@ import dev.dejvokep.boostedyaml.settings.dumper.DumperSettings;
 import dev.dejvokep.boostedyaml.settings.general.GeneralSettings;
 import dev.dejvokep.boostedyaml.settings.loader.LoaderSettings;
 import dev.dejvokep.boostedyaml.settings.updater.UpdaterSettings;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
@@ -41,6 +43,7 @@ public class VelocityLimboHandler {
     private static PlayerManager playerManager;
 
     private static YamlDocument config;
+    private static boolean queueEnabled;
 
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
@@ -101,7 +104,6 @@ public class VelocityLimboHandler {
 
         EventManager eventManger = proxyServer.getEventManager();
 
-        // TODO: make these respect config when config is added with .getServerFromProperty()
         String limboName = config.getString(Route.from("limbo-name"));
         String directConnectName = config.getString(Route.from("direct-connect-server"));
 
@@ -114,11 +116,11 @@ public class VelocityLimboHandler {
             return;
         }
 
-        // TODO: Add listeners here!
         eventManger.register(this, new ConnectionListener());
 
         int reconnectInterval = config.getInt(Route.from("task-interval"));
         int queueInterval = config.getInt(Route.from("queue-notify-interval"));
+        queueEnabled = config.getBoolean(Route.from("queue-enabled"), true);
 
         logger.info("Intervals " + reconnectInterval + " " + queueInterval);
 
@@ -126,8 +128,18 @@ public class VelocityLimboHandler {
         proxyServer.getScheduler().buildTask(this, () -> {
             // Prevent NullPointerException when Queue is empty
             if (!playerManager.hasQueuedPlayers()) return;
+            Collection<Player> connectedPlayers = limboServer.getPlayersConnected();
 
-            Player nextPlayer = playerManager.getNextQueuedPlayer();
+            if (connectedPlayers.isEmpty()) return;
+
+            Player nextPlayer;
+
+            if (queueEnabled) {
+                nextPlayer = playerManager.getNextQueuedPlayer();
+            } else {
+                nextPlayer = null;
+                connectedPlayers.iterator().next();
+            }
 
             if (nextPlayer == null || !nextPlayer.isActive()) return;
 
@@ -135,7 +147,6 @@ public class VelocityLimboHandler {
 
             // If enabled, check if a server responds to pings before connecting
             try {
-                // TODO: Add config check for pinging servers for now just ping
                 try {
                     previousServer.ping().join(); // Check if the server is online
                 } catch (CompletionException completionException) {
@@ -144,7 +155,33 @@ public class VelocityLimboHandler {
                 }
 
                 Utility.logInformational(String.format("Connecting %s to %s.", nextPlayer.getUsername(), previousServer.getServerInfo().getName()));
-                nextPlayer.createConnectionRequest(previousServer).connect();
+                nextPlayer.createConnectionRequest(previousServer).connect().whenComplete((result, throwable) -> {
+                    if (result.isSuccessful()) {
+                        Utility.logInformational(String.format("Successfully reconnected %s to %s.", nextPlayer.getUsername(), previousServer.getServerInfo().getName()));
+                        return;
+                    }
+
+                    if (throwable != null) {
+                        String lowerMessage = throwable.getMessage().toLowerCase();
+
+                        if (lowerMessage.contains("ban")) {
+                            nextPlayer.sendMessage(miniMessage.deserialize("<red>⛔ You are banned from that server.</red>"));
+                            playerManager.removePlayer(nextPlayer);
+                            nextPlayer.disconnect(miniMessage.deserialize("<red>You're banned from that server!"));
+                            return;
+                        }
+
+                        if (lowerMessage.contains("whitelist") || lowerMessage.contains("not whitelisted")) {
+                            nextPlayer.sendMessage(miniMessage.deserialize("<red>⚠ You are not whitelisted on that server.</red>"));
+                            playerManager.removePlayer(nextPlayer);
+                            nextPlayer.disconnect(Component.text("You're not whitelisted to the server you're trying to connect to!"));
+                            return;
+                        }
+
+                        //nextPlayer.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + throwable.getMessage() + "</red>"));
+                        //playerManager.removePlayer(nextPlayer);
+                    }
+                });
 
                 //playerManager.removePlayer(nextPlayer);
             } catch (CompletionException exception) {
@@ -154,6 +191,8 @@ public class VelocityLimboHandler {
 
         // Schedule queue position notifier
         proxyServer.getScheduler().buildTask(this, () -> {
+            if (!queueEnabled) return;
+
             for (Player player : playerManager.getReconnectQueue()) {
 
                 if (!player.isActive()) {
@@ -168,5 +207,9 @@ public class VelocityLimboHandler {
                 player.sendMessage(miniMessage.deserialize("<yellow>Queue position: " + position));
             }
         }).repeat(queueInterval, TimeUnit.SECONDS).schedule();
+    }
+
+    public static boolean isQueueEnabled() {
+        return queueEnabled;
     }
 }
