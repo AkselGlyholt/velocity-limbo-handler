@@ -53,5 +53,6 @@ public class ConnectionListener {
     @Subscribe
     public void onDisconnect(@NotNull DisconnectEvent event) {
         VelocityLimboHandler.getPlayerManager().removePlayer(event.getPlayer());
+        VelocityLimboHandler.getPlayerManager().removePlayerIssue(event.getPlayer());
     }
 }
