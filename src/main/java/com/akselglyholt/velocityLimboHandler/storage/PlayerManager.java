@@ -6,15 +6,14 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class PlayerManager {
     private final Map<Player, RegisteredServer> playerData;
     private final Queue<Player> reconnectQueue = new LinkedList<>();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
+    private final Map<UUID, String> playerConnectionIssues = new ConcurrentHashMap<>();
 
     public PlayerManager() {
         this.playerData = new LinkedHashMap<>();
@@ -66,4 +65,19 @@ public class PlayerManager {
         return reconnectQueue;
     }
 
+    public void addPlayerWithIssue(Player player, String issue) {
+        playerConnectionIssues.put(player.getUniqueId(), issue);
+    }
+
+    public boolean hasConnectionIssue(Player player) {
+        return playerConnectionIssues.containsKey(player.getUniqueId());
+    }
+
+    public String getConnectionIssue(Player player) {
+        return playerConnectionIssues.get(player.getUniqueId());
+    }
+
+    public void removePlayerIssue(Player player) {
+        playerConnectionIssues.remove(player.getUniqueId());
+    }
 }
