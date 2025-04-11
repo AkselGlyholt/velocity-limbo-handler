@@ -175,6 +175,7 @@ public class VelocityLimboHandler {
                 nextPlayer.createConnectionRequest(previousServer).connect().whenComplete((result, throwable) -> {
                     if (result.isSuccessful()) {
                         Utility.logInformational(String.format("Successfully reconnected %s to %s.", finalNextPlayer.getUsername(), previousServer.getServerInfo().getName()));
+                        playerManager.removePlayerIssue(finalNextPlayer);
                         return;
                     }
 
