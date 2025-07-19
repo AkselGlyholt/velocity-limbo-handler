@@ -22,10 +22,14 @@ public class PlayerManager {
 
     public void addPlayer(Player player, RegisteredServer registeredServer) {
         this.playerData.put(player, registeredServer);
-        this.reconnectQueue.add(player);
 
-        int position = getQueuePosition(player);
-        player.sendMessage(miniMessage.deserialize("<yellow>You are in the queue. Position: " + position));
+        // Only maintain a reconnect queue when queue mode is enabled
+        if (VelocityLimboHandler.isQueueEnabled()) {
+            this.reconnectQueue.add(player);
+
+            int position = getQueuePosition(player);
+            player.sendMessage(miniMessage.deserialize("<yellow>You are in the queue. Position: " + position));
+        }
     }
 
 
