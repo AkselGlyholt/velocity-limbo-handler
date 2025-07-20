@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler;
 
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
+import com.akselglyholt.velocityLimboHandler.listeners.PreConnectEventListener;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.google.inject.Inject;
@@ -120,6 +121,7 @@ public class VelocityLimboHandler {
         }
 
         eventManger.register(this, new ConnectionListener());
+        eventManger.register(this, new PreConnectEventListener());
 
         int reconnectInterval = config.getInt(Route.from("task-interval"));
         int queueInterval = config.getInt(Route.from("queue-notify-interval"));
