@@ -21,10 +21,13 @@ public class PlayerManager {
     }
 
     public void addPlayer(Player player, RegisteredServer registeredServer) {
-        this.playerData.put(player, registeredServer);
+        // Don't override if the player is already registered
+        if (!this.playerData.containsKey(player)) {
+            this.playerData.put(player, registeredServer);
+        }
 
         // Only maintain a reconnect queue when queue mode is enabled
-        if (VelocityLimboHandler.isQueueEnabled()) {
+        if (VelocityLimboHandler.isQueueEnabled() && !this.reconnectQueue.contains(player)) {
             this.reconnectQueue.add(player);
 
             int position = getQueuePosition(player);
