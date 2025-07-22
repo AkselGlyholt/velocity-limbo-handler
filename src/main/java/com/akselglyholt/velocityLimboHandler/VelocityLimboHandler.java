@@ -1,5 +1,8 @@
 package com.akselglyholt.velocityLimboHandler;
 
+import com.akselglyholt.velocityLimboHandler.commands.CommandBlockRule;
+import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
+import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
 import com.akselglyholt.velocityLimboHandler.listeners.PreConnectEventListener;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
@@ -30,6 +33,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
@@ -45,6 +49,7 @@ public class VelocityLimboHandler {
     private static RegisteredServer directConnectServer;
 
     private static PlayerManager playerManager;
+    private static CommandBlocker commandBlocker;
 
     private static YamlDocument config;
     private static boolean queueEnabled;
@@ -76,6 +81,7 @@ public class VelocityLimboHandler {
         }
 
         playerManager = new PlayerManager();
+        commandBlocker = new CommandBlocker();
     }
 
     public static RegisteredServer getLimboServer() {
@@ -122,11 +128,18 @@ public class VelocityLimboHandler {
 
         eventManger.register(this, new ConnectionListener());
         eventManger.register(this, new PreConnectEventListener());
+        eventManger.register(this, new CommandExecuteEventListener(commandBlocker));
 
         int reconnectInterval = config.getInt(Route.from("task-interval"));
         int queueInterval = config.getInt(Route.from("queue-notify-interval"));
         queueEnabled = config.getBoolean(Route.from("queue-enabled"), true);
         getLogger().info("Queue Enabled: " + queueEnabled);
+
+        // Disabled commands
+        List<String> disabledCommands = config.getStringList("disabled-commands");
+        for (String cmd : disabledCommands) {
+            commandBlocker.blockCommand(cmd, CommandBlockRule.onServer(limboName));
+        }
 
         // Schedule the reconnection task
         proxyServer.getScheduler().buildTask(this, () -> {

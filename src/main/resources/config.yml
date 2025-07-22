@@ -1,4 +1,4 @@
-file-version: 2
+file-version: 3
 
 # Server configs - These are settings you need to change!
 # The name of the limbo server in your velocity network
@@ -13,4 +13,7 @@ task-interval: 3 # The time in seconds (Default: 3)
 # How often should the user be notified of their position in the queue
 queue-enabled: true # Should players be reconnected through a queue (Default: true)
 queue-notify-interval: 30 # The time in seconds (Default: 30)
+
+# A list of disabled commands, which will not work inside the Limbo server. Recommended commands are ones that the player can use to transfer server, like /server or /hub
+disabled-commands: ["server", "lobby", "hub"]
 
