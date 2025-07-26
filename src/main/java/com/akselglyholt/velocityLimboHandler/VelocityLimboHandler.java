@@ -24,6 +24,9 @@ import dev.dejvokep.boostedyaml.settings.dumper.DumperSettings;
 import dev.dejvokep.boostedyaml.settings.general.GeneralSettings;
 import dev.dejvokep.boostedyaml.settings.loader.LoaderSettings;
 import dev.dejvokep.boostedyaml.settings.updater.UpdaterSettings;
+import eu.kennytv.maintenance.api.MaintenanceProvider;
+import eu.kennytv.maintenance.api.proxy.MaintenanceProxy;
+import eu.kennytv.maintenance.api.proxy.Server;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -56,20 +59,15 @@ public class VelocityLimboHandler {
 
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
+    public static MaintenanceProxy maintenanceAPI;
+
     @Inject
     public VelocityLimboHandler(ProxyServer server, Logger loggerInstance, @DataDirectory Path dataDirectory) {
         proxyServer = server;
         logger = loggerInstance;
 
         try {
-            config = YamlDocument.create(new File(dataDirectory.toFile(), "config.yml"),
-                    Objects.requireNonNull(getClass().getResourceAsStream("/config.yml")),
-                    GeneralSettings.DEFAULT,
-                    LoaderSettings.builder().setAutoUpdate(true).build(),
-                    DumperSettings.DEFAULT,
-                    UpdaterSettings.builder().setVersioning(new BasicVersioning("file-version"))
-                            .setOptionSorting(UpdaterSettings.OptionSorting.SORT_BY_DEFAULTS).build()
-            );
+            config = YamlDocument.create(new File(dataDirectory.toFile(), "config.yml"), Objects.requireNonNull(getClass().getResourceAsStream("/config.yml")), GeneralSettings.DEFAULT, LoaderSettings.builder().setAutoUpdate(true).build(), DumperSettings.DEFAULT, UpdaterSettings.builder().setVersioning(new BasicVersioning("file-version")).setOptionSorting(UpdaterSettings.OptionSorting.SORT_BY_DEFAULTS).build());
 
             config.update();
             config.save();
@@ -82,6 +80,7 @@ public class VelocityLimboHandler {
 
         playerManager = new PlayerManager();
         commandBlocker = new CommandBlocker();
+        maintenanceAPI = (MaintenanceProxy) MaintenanceProvider.get();
     }
 
     public static RegisteredServer getLimboServer() {
@@ -106,6 +105,10 @@ public class VelocityLimboHandler {
 
     public static YamlDocument getConfig() {
         return config;
+    }
+
+    public static MaintenanceProxy getMaintenanceAPI() {
+        return maintenanceAPI;
     }
 
     @Subscribe
@@ -183,6 +186,13 @@ public class VelocityLimboHandler {
                     return;
                 }
 
+                // Check if maintenance mode is enabled on Backend server
+                Server backendServer = maintenanceAPI.getServer(previousServer.getServerInfo().getName());
+
+                if (maintenanceAPI.isMaintenance(backendServer)) {
+                    return;
+                }
+
                 Utility.logInformational(String.format("Connecting %s to %s.", nextPlayer.getUsername(), previousServer.getServerInfo().getName()));
 
                 Player finalNextPlayer = nextPlayer;
@@ -194,8 +204,7 @@ public class VelocityLimboHandler {
                         return;
                     }
 
-                    Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s",
-                            finalNextPlayer.getUsername(), previousServer.getServerInfo().getName(), result.getStatus()));
+                    Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s", finalNextPlayer.getUsername(), previousServer.getServerInfo().getName(), result.getStatus()));
 
                     if (throwable != null) {
                         // Get the error message from throwable
@@ -278,6 +287,14 @@ public class VelocityLimboHandler {
                         player.sendMessage(miniMessage.deserialize("<red>⚠ You are not whitelisted on the server you were trying to connect to.</red>"));
                     }
                     continue;
+                }
+
+                RegisteredServer previousServer = playerManager.getPreviousServer(player);
+                Server backendServer = maintenanceAPI.getServer(previousServer.getServerInfo().getName());
+
+                if (maintenanceAPI.isMaintenance(backendServer)) {
+                    player.sendMessage(miniMessage.deserialize("<red>The server you're trying to connect to is currently in maintenance mode! You will be reconnected once it's available again."));
+                    return;
                 }
 
                 // Only show queue position if queue is enabled
