@@ -11,6 +11,7 @@ import com.google.inject.Inject;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.plugin.Dependency;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
@@ -24,6 +25,9 @@ import dev.dejvokep.boostedyaml.settings.dumper.DumperSettings;
 import dev.dejvokep.boostedyaml.settings.general.GeneralSettings;
 import dev.dejvokep.boostedyaml.settings.loader.LoaderSettings;
 import dev.dejvokep.boostedyaml.settings.updater.UpdaterSettings;
+import eu.kennytv.maintenance.api.MaintenanceProvider;
+import eu.kennytv.maintenance.api.proxy.MaintenanceProxy;
+import eu.kennytv.maintenance.api.proxy.Server;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -40,7 +44,10 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
-@Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", version = "1.0")
+@Plugin(
+        id = "velocity-limbo-handler",
+        name = "VelocityLimboHandler",
+        version = "1.3.0")
 public class VelocityLimboHandler {
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(VelocityLimboHandler.class);
     private static ProxyServer proxyServer;
@@ -56,20 +63,16 @@ public class VelocityLimboHandler {
 
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
+    private static boolean maintenancePluginPresent = false;
+    private static Object maintenanceAPI = null;
+
     @Inject
     public VelocityLimboHandler(ProxyServer server, Logger loggerInstance, @DataDirectory Path dataDirectory) {
         proxyServer = server;
         logger = loggerInstance;
 
         try {
-            config = YamlDocument.create(new File(dataDirectory.toFile(), "config.yml"),
-                    Objects.requireNonNull(getClass().getResourceAsStream("/config.yml")),
-                    GeneralSettings.DEFAULT,
-                    LoaderSettings.builder().setAutoUpdate(true).build(),
-                    DumperSettings.DEFAULT,
-                    UpdaterSettings.builder().setVersioning(new BasicVersioning("file-version"))
-                            .setOptionSorting(UpdaterSettings.OptionSorting.SORT_BY_DEFAULTS).build()
-            );
+            config = YamlDocument.create(new File(dataDirectory.toFile(), "config.yml"), Objects.requireNonNull(getClass().getResourceAsStream("/config.yml")), GeneralSettings.DEFAULT, LoaderSettings.builder().setAutoUpdate(true).build(), DumperSettings.DEFAULT, UpdaterSettings.builder().setVersioning(new BasicVersioning("file-version")).setOptionSorting(UpdaterSettings.OptionSorting.SORT_BY_DEFAULTS).build());
 
             config.update();
             config.save();
@@ -82,6 +85,40 @@ public class VelocityLimboHandler {
 
         playerManager = new PlayerManager();
         commandBlocker = new CommandBlocker();
+
+        initializeMaintenanceIntegration();
+    }
+
+    private void initializeMaintenanceIntegration() {
+        Optional<PluginContainer> maintenancePlugin = proxyServer.getPluginManager().getPlugin("maintenance");
+        if (maintenancePlugin.isPresent()) {
+            try {
+                // Load the MaintenanceProvider class
+                Class<?> providerClass = Class.forName("eu.kennytv.maintenance.api.MaintenanceProvider");
+
+                // Call MaintenanceProvider.get() - this directly returns the API instance
+                maintenanceAPI = providerClass.getMethod("get").invoke(null);
+
+                maintenancePluginPresent = true;
+                logger.info("Maintenance plugin detected and integrated successfully.");
+
+            } catch (Exception e) {
+                logger.warning("Failed to integrate with Maintenance plugin: " + e.getMessage());
+                maintenancePluginPresent = false;
+                maintenanceAPI = null;
+            }
+        } else {
+            logger.info("Maintenance plugin not detected - maintenance checks disabled.");
+        }
+    }
+
+    // Add getter methods for the maintenance API
+    public static boolean hasMaintenancePlugin() {
+        return maintenancePluginPresent;
+    }
+
+    public static Object getMaintenanceAPI() {
+        return maintenanceAPI;
     }
 
     public static RegisteredServer getLimboServer() {
@@ -107,6 +144,7 @@ public class VelocityLimboHandler {
     public static YamlDocument getConfig() {
         return config;
     }
+
 
     @Subscribe
     public void onInitialize(ProxyInitializeEvent event) {
@@ -183,6 +221,11 @@ public class VelocityLimboHandler {
                     return;
                 }
 
+                // Check if maintenance mode is enabled on Backend server
+                if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
+                    return;
+                }
+
                 Utility.logInformational(String.format("Connecting %s to %s.", nextPlayer.getUsername(), previousServer.getServerInfo().getName()));
 
                 Player finalNextPlayer = nextPlayer;
@@ -194,8 +237,7 @@ public class VelocityLimboHandler {
                         return;
                     }
 
-                    Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s",
-                            finalNextPlayer.getUsername(), previousServer.getServerInfo().getName(), result.getStatus()));
+                    Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s", finalNextPlayer.getUsername(), previousServer.getServerInfo().getName(), result.getStatus()));
 
                     if (throwable != null) {
                         // Get the error message from throwable
@@ -278,6 +320,13 @@ public class VelocityLimboHandler {
                         player.sendMessage(miniMessage.deserialize("<red>⚠ You are not whitelisted on the server you were trying to connect to.</red>"));
                     }
                     continue;
+                }
+
+                RegisteredServer previousServer = playerManager.getPreviousServer(player);
+
+                if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
+                    player.sendMessage(miniMessage.deserialize("<red>The server you're trying to connect to is currently in maintenance mode! You will be reconnected once it's available again."));
+                    return;
                 }
 
                 // Only show queue position if queue is enabled
