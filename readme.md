@@ -21,7 +21,7 @@ VelocityLimboHandler is a simple yet powerful **Velocity proxy plugin** that man
 4. Configure the **proxy, Limbo server, and plugin** as needed.  
 5. Restart the proxy once again.  
 
-**Important:** To prevent exploits, it's recommended to disable the `/server` command inside the Limbo server using [LuckPerms](https://luckperms.net/) with **context-based permissions**.  
+**Important:** To prevent exploits, it's recommended to disable the `/server` command inside the config, or using [LuckPerms](https://luckperms.net/) with **context-based permissions**.  
 
 ---
 
