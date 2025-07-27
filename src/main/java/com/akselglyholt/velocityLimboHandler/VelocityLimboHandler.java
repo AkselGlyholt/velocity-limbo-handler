@@ -11,6 +11,7 @@ import com.google.inject.Inject;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.plugin.Dependency;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
@@ -43,7 +44,10 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
-@Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", version = "1.0")
+@Plugin(
+        id = "velocity-limbo-handler",
+        name = "VelocityLimboHandler",
+        version = "1.0")
 public class VelocityLimboHandler {
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(VelocityLimboHandler.class);
     private static ProxyServer proxyServer;
@@ -59,7 +63,8 @@ public class VelocityLimboHandler {
 
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public static MaintenanceProxy maintenanceAPI;
+    private static boolean maintenancePluginPresent = false;
+    private static Object maintenanceAPI = null;
 
     @Inject
     public VelocityLimboHandler(ProxyServer server, Logger loggerInstance, @DataDirectory Path dataDirectory) {
@@ -80,7 +85,40 @@ public class VelocityLimboHandler {
 
         playerManager = new PlayerManager();
         commandBlocker = new CommandBlocker();
-        maintenanceAPI = (MaintenanceProxy) MaintenanceProvider.get();
+
+        initializeMaintenanceIntegration();
+    }
+
+    private void initializeMaintenanceIntegration() {
+        Optional<PluginContainer> maintenancePlugin = proxyServer.getPluginManager().getPlugin("maintenance");
+        if (maintenancePlugin.isPresent()) {
+            try {
+                // Load the MaintenanceProvider class
+                Class<?> providerClass = Class.forName("eu.kennytv.maintenance.api.MaintenanceProvider");
+
+                // Call MaintenanceProvider.get() - this directly returns the API instance
+                maintenanceAPI = providerClass.getMethod("get").invoke(null);
+
+                maintenancePluginPresent = true;
+                logger.info("Maintenance plugin detected and integrated successfully.");
+
+            } catch (Exception e) {
+                logger.warning("Failed to integrate with Maintenance plugin: " + e.getMessage());
+                maintenancePluginPresent = false;
+                maintenanceAPI = null;
+            }
+        } else {
+            logger.info("Maintenance plugin not detected - maintenance checks disabled.");
+        }
+    }
+
+    // Add getter methods for the maintenance API
+    public static boolean hasMaintenancePlugin() {
+        return maintenancePluginPresent;
+    }
+
+    public static Object getMaintenanceAPI() {
+        return maintenanceAPI;
     }
 
     public static RegisteredServer getLimboServer() {
@@ -107,9 +145,6 @@ public class VelocityLimboHandler {
         return config;
     }
 
-    public static MaintenanceProxy getMaintenanceAPI() {
-        return maintenanceAPI;
-    }
 
     @Subscribe
     public void onInitialize(ProxyInitializeEvent event) {
@@ -187,9 +222,7 @@ public class VelocityLimboHandler {
                 }
 
                 // Check if maintenance mode is enabled on Backend server
-                Server backendServer = maintenanceAPI.getServer(previousServer.getServerInfo().getName());
-
-                if (maintenanceAPI.isMaintenance(backendServer)) {
+                if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
                     return;
                 }
 
@@ -290,9 +323,8 @@ public class VelocityLimboHandler {
                 }
 
                 RegisteredServer previousServer = playerManager.getPreviousServer(player);
-                Server backendServer = maintenanceAPI.getServer(previousServer.getServerInfo().getName());
 
-                if (maintenanceAPI.isMaintenance(backendServer)) {
+                if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
                     player.sendMessage(miniMessage.deserialize("<red>The server you're trying to connect to is currently in maintenance mode! You will be reconnected once it's available again."));
                     return;
                 }
