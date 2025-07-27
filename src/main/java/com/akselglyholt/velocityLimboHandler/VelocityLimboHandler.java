@@ -11,7 +11,6 @@ import com.google.inject.Inject;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
-import com.velocitypowered.api.plugin.Dependency;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
@@ -25,12 +24,11 @@ import dev.dejvokep.boostedyaml.settings.dumper.DumperSettings;
 import dev.dejvokep.boostedyaml.settings.general.GeneralSettings;
 import dev.dejvokep.boostedyaml.settings.loader.LoaderSettings;
 import dev.dejvokep.boostedyaml.settings.updater.UpdaterSettings;
-import eu.kennytv.maintenance.api.MaintenanceProvider;
-import eu.kennytv.maintenance.api.proxy.MaintenanceProxy;
-import eu.kennytv.maintenance.api.proxy.Server;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bstats.charts.SingleLineChart;
+import org.bstats.velocity.Metrics;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
@@ -40,6 +38,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
@@ -66,8 +65,11 @@ public class VelocityLimboHandler {
     private static boolean maintenancePluginPresent = false;
     private static Object maintenanceAPI = null;
 
+    private final Metrics.Factory metricsFactory;
+    private Metrics metrics;
+
     @Inject
-    public VelocityLimboHandler(ProxyServer server, Logger loggerInstance, @DataDirectory Path dataDirectory) {
+    public VelocityLimboHandler(ProxyServer server, Logger loggerInstance, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
         proxyServer = server;
         logger = loggerInstance;
 
@@ -85,8 +87,25 @@ public class VelocityLimboHandler {
 
         playerManager = new PlayerManager();
         commandBlocker = new CommandBlocker();
+        metricsFactory = metricsFactoryInstance;
 
         initializeMaintenanceIntegration();
+    }
+
+    @Subscribe
+    public void onProxyInitialization(ProxyInitializeEvent event) {
+        logger.info("Loading Limbo Handler!");
+
+        int pluginId = 26682;
+        metrics = metricsFactory.make(this, pluginId);
+
+        // Metric for players inside the limbo
+        metrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
+            @Override
+            public Integer call() throws Exception {
+                return limboServer != null ? limboServer.getPlayersConnected().size() : 0;
+            }
+        }));
     }
 
     private void initializeMaintenanceIntegration() {

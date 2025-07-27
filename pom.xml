@@ -99,6 +99,12 @@
                             <pattern>dev.dejvokep.boostedyaml</pattern>
                             <shadedPattern>com.akselglyholt.velocityLimboHandler.libs</shadedPattern>
                         </relocate>
+
+                        <relocation>
+                            <pattern>org.bstats</pattern>
+                            <!-- Replace this with your package! -->
+                            <shadedPattern>com.akselglyholt.velocityLimboHandler</shadedPattern>
+                        </relocation>
                     </relocations>
                     <transformers>
                         <transformer
@@ -209,6 +215,13 @@
             <artifactId>maintenance-api-proxy</artifactId>
             <version>4.2.1</version>
             <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.bstats</groupId>
+            <artifactId>bstats-velocity</artifactId>
+            <version>3.0.2</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 </project>
