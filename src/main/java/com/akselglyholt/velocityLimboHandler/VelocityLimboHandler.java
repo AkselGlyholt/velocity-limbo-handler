@@ -47,7 +47,7 @@ import java.util.logging.Logger;
 @Plugin(
         id = "velocity-limbo-handler",
         name = "VelocityLimboHandler",
-        version = "1.0")
+        version = "1.3.0")
 public class VelocityLimboHandler {
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(VelocityLimboHandler.class);
     private static ProxyServer proxyServer;
