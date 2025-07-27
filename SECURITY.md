@@ -5,8 +5,8 @@ Currently I make sure that the following versions are supported, and updated to 
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.2.x   | :white_check_mark: |
-| < 1.2   | :x:                |
+| latest   | :white_check_mark: |
+| anything but latest   | :x:                |
 
 ## Reporting a Vulnerability
 
