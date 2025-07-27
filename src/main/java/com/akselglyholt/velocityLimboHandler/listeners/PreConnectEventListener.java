@@ -20,7 +20,7 @@ public class PreConnectEventListener {
         if (virtualHost != null) {
             List<String> forcedServers = VelocityLimboHandler.getProxyServer().getConfiguration().getForcedHosts().get(virtualHost);
 
-            if (forcedServers != null || !forcedServers.isEmpty()) {
+            if (forcedServers != null && !forcedServers.isEmpty()) {
                 String forcedTarget = forcedServers.get(0);
                 RegisteredServer forcedServer = VelocityLimboHandler.getProxyServer().getServer(forcedTarget).orElse(null);
 
