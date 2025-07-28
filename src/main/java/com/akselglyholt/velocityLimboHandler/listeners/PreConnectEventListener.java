@@ -16,7 +16,6 @@ public class PreConnectEventListener {
         Player player = event.getPlayer();
         String virtualHost = player.getVirtualHost().map(InetSocketAddress::getHostName).orElse(null);
 
-        System.out.println(virtualHost);
         if (virtualHost != null) {
             List<String> forcedServers = VelocityLimboHandler.getProxyServer().getConfiguration().getForcedHosts().get(virtualHost);
 
