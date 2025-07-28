@@ -44,7 +44,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
-@Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", version = "1.3.0")
+@Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", version = "1.4.0")
 public class VelocityLimboHandler {
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(VelocityLimboHandler.class);
     private static ProxyServer proxyServer;
