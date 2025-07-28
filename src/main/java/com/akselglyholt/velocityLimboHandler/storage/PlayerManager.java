@@ -6,7 +6,6 @@ import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import dev.dejvokep.boostedyaml.route.Route;
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.util.*;
@@ -34,12 +33,13 @@ public class PlayerManager {
             this.playerData.put(player, registeredServer);
         }
 
+        Utility.sendWelcomeMessage(player, null);
+
         // Only maintain a reconnect queue when queue mode is enabled
         if (VelocityLimboHandler.isQueueEnabled() && !this.reconnectQueue.contains(player)) {
             this.reconnectQueue.add(player);
 
             String formatedMsg = MessageFormater.formatMessage(queuePositionMsg, player);
-            Utility.sendWelcomeMessage(player, null);
             player.sendMessage(miniMessage.deserialize(formatedMsg));
         }
     }
