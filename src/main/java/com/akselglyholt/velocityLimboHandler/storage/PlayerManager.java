@@ -1,8 +1,10 @@
 package com.akselglyholt.velocityLimboHandler.storage;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
+import com.akselglyholt.velocityLimboHandler.misc.MessageFormater;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import dev.dejvokep.boostedyaml.route.Route;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
@@ -15,8 +17,13 @@ public class PlayerManager {
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Map<UUID, String> playerConnectionIssues = new ConcurrentHashMap<>();
 
+    private static String queuePositionMsg;
+
     public PlayerManager() {
         this.playerData = new LinkedHashMap<>();
+
+        queuePositionMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("queuePositionJoin"));
+
         VelocityLimboHandler.getLogger().info("⚠️ New PlayerManager instance created!");
     }
 
@@ -31,6 +38,7 @@ public class PlayerManager {
             this.reconnectQueue.add(player);
 
             int position = getQueuePosition(player);
+            String formatedMsg = MessageFormater.formatMessage(queuePositionMsg, player);
             player.sendMessage(miniMessage.deserialize("<yellow>You are in the queue. Position: " + position));
         }
     }

@@ -1,0 +1,23 @@
+file-version: 1
+
+# You can change all messages inside this file.
+# Messages use minimessage format: https://docs.advntr.dev/minimessage/index.html
+
+# Messages can include placeholders such as:
+# [queue-position] which will display queue position
+
+# These messages are for errors under reconnection, such as not whitelisted or banned.
+bannedMessage: "<red>⛔ You are banned from that server.</red>"
+notWhitelisted: "<red>⚠ You are not whitelisted on that server.</red>"
+
+maintenanceMode: "<red>The server you're trying to connect to is currently in maintenance mode! You will be reconnected once it's available again."
+
+# This message has support for adding [position] which shows the players position in the queue
+queuePosition: "<yellow>Queue position: [queue-position]"
+
+# The notification the user gets of their position in the queue when joining.
+# This is separate from the welcomeMessage, as the queue is toggleable.
+queuePositionJoin: "<yellow>You are in the queue. Position: [queue-position]"
+
+# Welcome messages
+welcomeMessage: "<blue>🌌 You were sent to Limbo.</blue> \n<gray>You will be reconnected when the system allows.</gray> \n"
