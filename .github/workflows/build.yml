@@ -3,7 +3,7 @@ name: Build
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   build:
@@ -33,13 +33,14 @@ jobs:
       - name: Build plugin with Maven
         run: mvn clean package
 
-      - name: Rename JAR with Build Number
+      - name: Rename shaded JAR with build number
         run: |
-          original_jar=$(find target -type f -name "*.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar")
-          new_name=$(basename "$original_jar" .jar)+${{ github.run_number }}.jar
-          mv "$original_jar" "target/$new_name"
+          jar=$(find target -maxdepth 1 -type f -name "*.jar" ! -name "original-*.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar")
+          base=$(basename "$jar" .jar)
+          new_name="${base}+${{ github.run_number }}.jar"
+          mv "$jar" "target/$new_name"
 
-      - name: Upload Build Artifact
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: Click here to download
