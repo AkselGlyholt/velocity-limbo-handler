@@ -39,9 +39,10 @@ jobs:
           base=$(basename "$jar" .jar)
           new_name="${base}+${{ github.run_number }}.jar"
           mv "$jar" "target/$new_name"
+          echo "RENAMED_JAR=$new_name" >> $GITHUB_ENV
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: Click here to download
-          path: target/*.jar
+          path: target/${{ env.RENAMED_JAR }}
