@@ -1,7 +1,7 @@
 {
   "id": "velocity-limbo-handler",
   "name": "Velocity Limbo Handler",
-  "version": "1.4.0",
+  "version": "${project.version}",
   "authors": ["Aksel Glyholt"],
   "main": "com.akselglyholt.velocityLimboHandler.VelocityLimboHandler"
 }
