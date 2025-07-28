@@ -44,7 +44,6 @@ public class ConnectionListener {
         // IF a player gets redirected to Limbo from another server, add them to the Map
         if (Utility.doServerNamesMatch(currentServerConnection.getServer(), VelocityLimboHandler.getLimboServer())) {
             VelocityLimboHandler.getPlayerManager().addPlayer(player, previousServer);
-            Utility.sendWelcomeMessage(player, null);
         }
     }
 

@@ -2,6 +2,7 @@ package com.akselglyholt.velocityLimboHandler.storage;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormater;
+import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import dev.dejvokep.boostedyaml.route.Route;
@@ -37,9 +38,9 @@ public class PlayerManager {
         if (VelocityLimboHandler.isQueueEnabled() && !this.reconnectQueue.contains(player)) {
             this.reconnectQueue.add(player);
 
-            int position = getQueuePosition(player);
             String formatedMsg = MessageFormater.formatMessage(queuePositionMsg, player);
-            player.sendMessage(miniMessage.deserialize("<yellow>You are in the queue. Position: " + position));
+            Utility.sendWelcomeMessage(player, null);
+            player.sendMessage(miniMessage.deserialize(formatedMsg));
         }
     }
 
