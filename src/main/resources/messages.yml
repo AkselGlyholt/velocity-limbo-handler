@@ -20,4 +20,4 @@ queuePosition: "<yellow>Queue position: [queue-position]"
 queuePositionJoin: "<yellow>You are in the queue. Position: [queue-position]"
 
 # Welcome messages
-welcomeMessage: "<blue>🌌 You were sent to Limbo.</blue> \n<gray>You will be reconnected when the system allows.</gray> \n"
+welcomeMessage: "<blue>🌌 You were sent to Limbo.</blue> \n<gray>You will be reconnected when the system allows.</gray>"
