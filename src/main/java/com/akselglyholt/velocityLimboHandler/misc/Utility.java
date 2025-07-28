@@ -3,8 +3,7 @@ package com.akselglyholt.velocityLimboHandler.misc;
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
-import eu.kennytv.maintenance.api.proxy.MaintenanceProxy;
-import eu.kennytv.maintenance.api.proxy.Server;
+import dev.dejvokep.boostedyaml.route.Route;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.jetbrains.annotations.NotNull;
@@ -14,6 +13,7 @@ import java.util.Optional;
 
 public class Utility {
     private static final MiniMessage miniMessage = MiniMessage.miniMessage();
+    private static final String welcomeMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("welcomeMessage"));
 
     // Returns whether the names of the servers match.
     public static boolean doServerNamesMatch(@NotNull RegisteredServer var0, @NotNull RegisteredServer var1) {
@@ -35,8 +35,7 @@ public class Utility {
             case "connection-issue" ->
                     miniMessage.deserialize("<dark_red>⚠ You had connection issues and were placed in Limbo.</dark_red>\n" +
                             "<gray>Try reconnecting or wait for a stable connection.</gray>");
-            default -> miniMessage.deserialize("<blue>🌌 You were sent to Limbo.</blue>\n" +
-                    "<gray>You will be reconnected when the system allows.</gray>");
+            default -> miniMessage.deserialize(MessageFormater.formatMessage(welcomeMsg, player));
         };
 
         player.sendMessage(message);
@@ -71,6 +70,7 @@ public class Utility {
 
     /**
      * Check if a specific server is in maintenance mode
+     *
      * @param serverName The name of the server to check
      * @return true if the server is in maintenance, false otherwise
      */

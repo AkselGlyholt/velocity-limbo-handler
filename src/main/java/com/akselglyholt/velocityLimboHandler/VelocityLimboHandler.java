@@ -5,6 +5,7 @@ import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
 import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
 import com.akselglyholt.velocityLimboHandler.listeners.PreConnectEventListener;
+import com.akselglyholt.velocityLimboHandler.misc.MessageFormater;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.google.inject.Inject;
@@ -43,10 +44,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
-@Plugin(
-        id = "velocity-limbo-handler",
-        name = "VelocityLimboHandler",
-        version = "1.3.0")
+@Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", version = "1.4.0")
 public class VelocityLimboHandler {
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(VelocityLimboHandler.class);
     private static ProxyServer proxyServer;
@@ -58,6 +56,7 @@ public class VelocityLimboHandler {
     private static CommandBlocker commandBlocker;
 
     private static YamlDocument config;
+    private static YamlDocument messageConfig;
     private static boolean queueEnabled;
 
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
@@ -68,6 +67,12 @@ public class VelocityLimboHandler {
     private final Metrics.Factory metricsFactory;
     private Metrics metrics;
 
+    // Message caching
+    private static String bannedMsg;
+    private static String whitelistedMsg;
+    private static String maintenanceModeMsg;
+    private static String queuePositionMsg;
+
     @Inject
     public VelocityLimboHandler(ProxyServer server, Logger loggerInstance, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
         proxyServer = server;
@@ -75,9 +80,18 @@ public class VelocityLimboHandler {
 
         try {
             config = YamlDocument.create(new File(dataDirectory.toFile(), "config.yml"), Objects.requireNonNull(getClass().getResourceAsStream("/config.yml")), GeneralSettings.DEFAULT, LoaderSettings.builder().setAutoUpdate(true).build(), DumperSettings.DEFAULT, UpdaterSettings.builder().setVersioning(new BasicVersioning("file-version")).setOptionSorting(UpdaterSettings.OptionSorting.SORT_BY_DEFAULTS).build());
+            messageConfig = YamlDocument.create(new File(dataDirectory.toFile(), "messages.yml"), Objects.requireNonNull(getClass().getResourceAsStream("/messages.yml")), GeneralSettings.DEFAULT, LoaderSettings.builder().setAutoUpdate(true).build(), DumperSettings.DEFAULT, UpdaterSettings.builder().setVersioning(new BasicVersioning("file-version")).setOptionSorting(UpdaterSettings.OptionSorting.SORT_BY_DEFAULTS).build());
 
             config.update();
             config.save();
+
+            messageConfig.update();
+            messageConfig.save();
+
+            bannedMsg = messageConfig.getString(Route.from("bannedMessage"));
+            whitelistedMsg = messageConfig.getString(Route.from("notWhitelisted"));
+            maintenanceModeMsg = messageConfig.getString(Route.from("maintenanceMode"));
+            queuePositionMsg = messageConfig.getString(Route.from("queuePosition"));
         } catch (IOException e) {
             logger.severe("Something went wrong while trying to update/create config: " + e);
             logger.severe("Plugin will now shut down!");
@@ -162,6 +176,10 @@ public class VelocityLimboHandler {
 
     public static YamlDocument getConfig() {
         return config;
+    }
+
+    public static YamlDocument getMessageConfig() {
+        return messageConfig;
     }
 
 
@@ -275,14 +293,18 @@ public class VelocityLimboHandler {
                         String combinedErrorMessage = (errorMessage + " " + reasonFromComponent).toLowerCase();
 
                         if (combinedErrorMessage.contains("ban") || combinedErrorMessage.contains("banned")) {
-                            finalNextPlayer.sendMessage(miniMessage.deserialize("<red>⛔ You are banned from that server.</red>"));
+                            String formatedMsg = MessageFormater.formatMessage(bannedMsg, finalNextPlayer);
+
+                            finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
                             // Mark them with an issue instead of kicking
                             playerManager.addPlayerWithIssue(finalNextPlayer, "banned");
                             return;
                         }
 
                         if (combinedErrorMessage.contains("whitelist") || combinedErrorMessage.contains("not whitelisted")) {
-                            finalNextPlayer.sendMessage(miniMessage.deserialize("<red>⚠ You are not whitelisted on that server.</red>"));
+                            String formatedMsg = MessageFormater.formatMessage(whitelistedMsg, finalNextPlayer);
+
+                            finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
                             // Mark them with an issue instead of kicking
                             playerManager.addPlayerWithIssue(finalNextPlayer, "not_whitelisted");
                             return;
@@ -297,7 +319,9 @@ public class VelocityLimboHandler {
                             String reason = PlainTextComponentSerializer.plainText().serialize(reasonComponent.get()).toLowerCase();
 
                             if (reason.contains("whitelist") || reason.contains("not whitelisted")) {
-                                finalNextPlayer.sendMessage(miniMessage.deserialize("<red>⚠ You are not whitelisted on that server.</red>"));
+                                String formatedMsg = MessageFormater.formatMessage(whitelistedMsg, finalNextPlayer);
+
+                                finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
                                 // Instead of kicking and removing the player, mark them with an issue
                                 playerManager.addPlayerWithIssue(finalNextPlayer, "not_whitelisted");
                                 // Remove them from the reconnection queue but keep them in limbo
@@ -306,7 +330,9 @@ public class VelocityLimboHandler {
                             }
 
                             if (reason.contains("ban") || reason.contains("banned")) {
-                                finalNextPlayer.sendMessage(miniMessage.deserialize("<red>⛔ You are banned from that server.</red>"));
+                                String formatedMsg = MessageFormater.formatMessage(bannedMsg, finalNextPlayer);
+
+                                finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
                                 // Instead of kicking and removing the player, mark them with an issue
                                 playerManager.addPlayerWithIssue(finalNextPlayer, "banned");
                                 // Remove them from the reconnection queue but keep them in limbo
@@ -334,9 +360,13 @@ public class VelocityLimboHandler {
                     String issue = playerManager.getConnectionIssue(player);
 
                     if ("banned".equals(issue)) {
-                        player.sendMessage(miniMessage.deserialize("<red>⛔ You are banned from the server you were trying to connect to.</red>"));
+                        String formatedMsg = MessageFormater.formatMessage(bannedMsg, player);
+
+                        player.sendMessage(miniMessage.deserialize(formatedMsg));
                     } else if ("not_whitelisted".equals(issue)) {
-                        player.sendMessage(miniMessage.deserialize("<red>⚠ You are not whitelisted on the server you were trying to connect to.</red>"));
+                        String formatedMsg = MessageFormater.formatMessage(whitelistedMsg, player);
+
+                        player.sendMessage(miniMessage.deserialize(formatedMsg));
                     }
                     continue;
                 }
@@ -344,7 +374,9 @@ public class VelocityLimboHandler {
                 RegisteredServer previousServer = playerManager.getPreviousServer(player);
 
                 if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
-                    player.sendMessage(miniMessage.deserialize("<red>The server you're trying to connect to is currently in maintenance mode! You will be reconnected once it's available again."));
+                    String formatedMsg = MessageFormater.formatMessage(maintenanceModeMsg, player);
+
+                    player.sendMessage(miniMessage.deserialize(formatedMsg));
                     return;
                 }
 
@@ -353,8 +385,9 @@ public class VelocityLimboHandler {
 
                 int position = playerManager.getQueuePosition(player);
                 if (position == -1) continue;
+                String formatedQueuePositionMsg = MessageFormater.formatMessage(queuePositionMsg, player);
 
-                player.sendMessage(miniMessage.deserialize("<yellow>Queue position: " + position));
+                player.sendMessage(miniMessage.deserialize(formatedQueuePositionMsg));
             }
         }).repeat(queueInterval, TimeUnit.SECONDS).schedule();
     }
