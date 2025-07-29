@@ -1,7 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.storage;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
-import com.akselglyholt.velocityLimboHandler.misc.MessageFormater;
+import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -10,10 +10,11 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class PlayerManager {
     private final Map<Player, RegisteredServer> playerData;
-    private final Queue<Player> reconnectQueue = new LinkedList<>();
+    private final Queue<Player> reconnectQueue = new ConcurrentLinkedQueue<>();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Map<UUID, String> playerConnectionIssues = new ConcurrentHashMap<>();
 
@@ -37,7 +38,7 @@ public class PlayerManager {
         if (VelocityLimboHandler.isQueueEnabled() && !this.reconnectQueue.contains(player)) {
             this.reconnectQueue.add(player);
 
-            String formatedMsg = MessageFormater.formatMessage(queuePositionMsg, player);
+            String formatedMsg = MessageFormatter.formatMessage(queuePositionMsg, player);
             player.sendMessage(miniMessage.deserialize(formatedMsg));
         }
     }
@@ -45,6 +46,10 @@ public class PlayerManager {
 
     public void removePlayer(Player player) {
         this.playerData.remove(player);
+        this.reconnectQueue.remove(player);
+    }
+
+    public void removePlayerFromQueue(Player player) {
         this.reconnectQueue.remove(player);
     }
 

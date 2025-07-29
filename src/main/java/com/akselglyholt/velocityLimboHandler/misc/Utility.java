@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.misc;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
+import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import dev.dejvokep.boostedyaml.route.Route;
@@ -37,7 +38,7 @@ public class Utility {
             case "connection-issue" ->
                     miniMessage.deserialize("<dark_red>⚠ You had connection issues and were placed in Limbo.</dark_red>\n" +
                             "<gray>Try reconnecting or wait for a stable connection.</gray>");
-            default -> miniMessage.deserialize(MessageFormater.formatMessage(welcomeMsg, player));
+            default -> miniMessage.deserialize(MessageFormatter.formatMessage(welcomeMsg, player));
         };
 
         player.sendMessage(message);
