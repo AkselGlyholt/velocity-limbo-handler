@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.listeners;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
+import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.proxy.Player;
@@ -17,17 +18,27 @@ public class PreConnectEventListener {
         String virtualHost = player.getVirtualHost().map(InetSocketAddress::getHostName).orElse(null);
 
         if (virtualHost != null) {
-            List<String> forcedServers = VelocityLimboHandler.getProxyServer().getConfiguration().getForcedHosts().get(virtualHost);
+            List<String> forcedServers = VelocityLimboHandler.getProxyServer()
+                    .getConfiguration()
+                    .getForcedHosts()
+                    .get(virtualHost);
 
             if (forcedServers != null && !forcedServers.isEmpty()) {
                 String forcedTarget = forcedServers.get(0);
-                RegisteredServer forcedServer = VelocityLimboHandler.getProxyServer().getServer(forcedTarget).orElse(null);
+                RegisteredServer forcedServer = VelocityLimboHandler.getProxyServer()
+                        .getServer(forcedTarget)
+                        .orElse(null);
 
-                if (forcedServer != null) {
-                    // Store this as the "intended" server before rerouting them to limbo
-                    VelocityLimboHandler.getPlayerManager().addPlayer(player, forcedServer);
+                RegisteredServer actualTarget = event.getOriginalServer();
+
+                if (forcedServer != null && actualTarget != null) {
+                    // Only store if player is being redirected away from their intended target (e.g., to limbo)
+                    if (!Utility.doServerNamesMatch(forcedServer, actualTarget)) {
+                        VelocityLimboHandler.getPlayerManager().addPlayer(player, forcedServer);
+                    }
                 }
             }
         }
     }
+
 }

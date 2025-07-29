@@ -49,8 +49,8 @@ public class PlayerManager {
 
 
     public void removePlayer(Player player) {
-        this.playerData.remove(player);
         removePlayerFromQueue(player);
+        this.playerData.remove(player);
     }
 
     public RegisteredServer getPreviousServer(Player player) {
