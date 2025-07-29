@@ -151,6 +151,11 @@ public class Utility {
         }
     }
 
+    /**
+     *
+     * @param player The player you want to check is whitelisted
+     * @return true if whitelisted, otherwise returns false
+     */
     public static boolean playerMaintenanceWhitelisted(Player player) {
         if (!hasMaintenance()) {
             return false;
