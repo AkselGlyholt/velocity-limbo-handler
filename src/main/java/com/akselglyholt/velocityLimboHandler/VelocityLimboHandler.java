@@ -260,7 +260,13 @@ public class VelocityLimboHandler {
 
                 // Check if maintenance mode is enabled on Backend server
                 if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
-                    return;
+                    // Check if the user has bypass permission for Maintenance or is admin
+
+                    if (nextPlayer.hasPermission("maintenance.admin") || nextPlayer.hasPermission("maintenance.bypass") || nextPlayer.hasPermission("maintenance.singleserver.bypass." + limboName)) {
+                        logger.info(nextPlayer.getUsername() + " bypassed maintenance to " + previousServer.getServerInfo().getName() + " from " + limboName + " Server");
+                    } else {
+                        return;
+                    }
                 }
 
                 Utility.logInformational(String.format("Connecting %s to %s.", nextPlayer.getUsername(), previousServer.getServerInfo().getName()));
