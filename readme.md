@@ -63,6 +63,7 @@ VelocityLimboHandler does not provide a built-in fallback system, so you'll need
 
 ## Todo
 * [ ] Priority Queue with permissions
+* [x] Per server queue
 * [x] Maintenance plugin integration
 
 ---
