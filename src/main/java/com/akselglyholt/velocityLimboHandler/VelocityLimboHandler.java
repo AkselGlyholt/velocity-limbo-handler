@@ -4,7 +4,6 @@ import com.akselglyholt.velocityLimboHandler.commands.CommandBlockRule;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
 import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
-import com.akselglyholt.velocityLimboHandler.listeners.PreConnectEventListener;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
@@ -57,7 +56,7 @@ public class VelocityLimboHandler {
     private static YamlDocument messageConfig;
     private static boolean queueEnabled;
 
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
+    private static final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     private static boolean maintenancePluginPresent = false;
     private static Object maintenanceAPI = null;
@@ -200,7 +199,6 @@ public class VelocityLimboHandler {
         }
 
         eventManger.register(this, new ConnectionListener());
-        eventManger.register(this, new PreConnectEventListener());
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker));
 
         int reconnectInterval = config.getInt(Route.from("task-interval"));
@@ -220,146 +218,29 @@ public class VelocityLimboHandler {
             Collection<Player> connectedPlayers = limboServer.getPlayersConnected();
             if (connectedPlayers.isEmpty()) return;
 
-            Player nextPlayer;
+            // Prune all in-active members
+            playerManager.pruneInactivePlayers();
 
+            // Loop through all servers, if queue is enabled
             if (queueEnabled) {
-                // Queue mode - get the next player from the queue
-                if (!playerManager.hasQueuedPlayers()) return;
-                nextPlayer = playerManager.getNextQueuedPlayer();
+                for (RegisteredServer server : proxyServer.getAllServers()) {
+                    // Queue mode – get the next player from the queue
+                    if (!playerManager.hasQueuedPlayers(server)) continue;
+                    Player nextPlayer = playerManager.getNextQueuedPlayer(server);
+
+                    reconnectPlayer(nextPlayer);
+                }
             } else {
-                // Non-queue mode - get the first connected player that doesn't have issues
-                nextPlayer = null;
+                Player nextPlayer = null;
+
                 for (Player player : connectedPlayers) {
-                    if (!playerManager.hasConnectionIssue(player)) {
+                    if (!playerManager.hasConnectionIssue(player) && player.isActive()) {
                         nextPlayer = player;
                         break;
                     }
                 }
 
-                // If all players have issues, just return
-                if (nextPlayer == null) return;
-            }
-
-            if (nextPlayer == null || !nextPlayer.isActive()) return;
-
-            // Skip players with connection issues
-            if (playerManager.hasConnectionIssue(nextPlayer)) return;
-
-            RegisteredServer previousServer = playerManager.getPreviousServer(nextPlayer);
-
-            // If enabled, check if a server responds to pings before connecting
-            try {
-                try {
-                    previousServer.ping().join(); // Check if the server is online
-                } catch (CompletionException completionException) {
-                    // Server failed to respond to ping request, return to prevent spam
-                    return;
-                }
-
-                // Check if maintenance mode is enabled on Backend server
-                if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
-                    // Check if the user has bypass permission for Maintenance or is admin
-
-                    if (nextPlayer.hasPermission("maintenance.admin")
-                            || nextPlayer.hasPermission("maintenance.bypass")
-                            || nextPlayer.hasPermission("maintenance.singleserver.bypass." + limboName)
-                            || Utility.playerMaintenanceWhitelisted(nextPlayer)) {
-                        logger.info(nextPlayer.getUsername() + " bypassed maintenance to " + previousServer.getServerInfo().getName() + " from " + limboName + " Server");
-                    } else {
-                        return;
-                    }
-                }
-
-                Utility.logInformational(String.format("Connecting %s to %s.", nextPlayer.getUsername(), previousServer.getServerInfo().getName()));
-
-                Player finalNextPlayer = nextPlayer;
-
-                nextPlayer.createConnectionRequest(previousServer).connect().whenComplete((result, throwable) -> {
-                    if (result.isSuccessful()) {
-                        Utility.logInformational(String.format("Successfully reconnected %s to %s.", finalNextPlayer.getUsername(), previousServer.getServerInfo().getName()));
-                        playerManager.removePlayerIssue(finalNextPlayer);
-                        return;
-                    }
-
-                    Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s", finalNextPlayer.getUsername(), previousServer.getServerInfo().getName(), result.getStatus()));
-
-                    if (throwable != null) {
-                        // Get the error message from throwable
-                        String errorMessage = throwable.getMessage();
-                        if (errorMessage == null) {
-                            errorMessage = "";
-                        }
-
-                        // Also check the result component if available
-                        String reasonFromComponent = "";
-                        if (result.getReasonComponent().isPresent()) {
-                            reasonFromComponent = PlainTextComponentSerializer.plainText().serialize(result.getReasonComponent().get());
-                        }
-
-                        // Check both the throwable message and the component reason
-                        String combinedErrorMessage = (errorMessage + " " + reasonFromComponent).toLowerCase();
-
-                        if (combinedErrorMessage.contains("ban") || combinedErrorMessage.contains("banned")) {
-                            String formatedMsg = MessageFormatter.formatMessage(bannedMsg, finalNextPlayer);
-
-                            finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
-                            // Mark them with an issue instead of kicking
-                            playerManager.addPlayerWithIssue(finalNextPlayer, "banned");
-                            // Remove them from the reconnection queue to avoid blocking others
-                            playerManager.removePlayerFromQueue(finalNextPlayer);
-                            return;
-                        }
-
-                        if (combinedErrorMessage.contains("whitelist") || combinedErrorMessage.contains("not whitelisted")) {
-                            String formatedMsg = MessageFormatter.formatMessage(whitelistedMsg, finalNextPlayer);
-
-                            finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
-                            // Mark them with an issue instead of kicking
-                            playerManager.addPlayerWithIssue(finalNextPlayer, "not_whitelisted");
-                            // Remove them from the reconnection queue to avoid blocking others
-                            playerManager.removePlayerFromQueue(finalNextPlayer);
-                            return;
-                        }
-
-                        // Handle any other connection errors
-                        finalNextPlayer.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + (errorMessage.isEmpty() ? reasonFromComponent : errorMessage) + "</red>"));
-                    } else {
-                        // Handle case where we have a result but no throwable
-                        Optional<Component> reasonComponent = result.getReasonComponent();
-                        if (reasonComponent.isPresent()) {
-                            String reason = PlainTextComponentSerializer.plainText().serialize(reasonComponent.get()).toLowerCase();
-
-                            if (reason.contains("whitelist") || reason.contains("not whitelisted")) {
-                                String formatedMsg = MessageFormatter.formatMessage(whitelistedMsg, finalNextPlayer);
-
-                                finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
-                                // Instead of kicking and removing the player, mark them with an issue
-                                playerManager.addPlayerWithIssue(finalNextPlayer, "not_whitelisted");
-                                // Remove them from the reconnection queue but keep them in limbo
-                                playerManager.removePlayer(finalNextPlayer);
-                                return;
-                            }
-
-                            if (reason.contains("ban") || reason.contains("banned")) {
-                                String formatedMsg = MessageFormatter.formatMessage(bannedMsg, finalNextPlayer);
-
-                                finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
-                                // Instead of kicking and removing the player, mark them with an issue
-                                playerManager.addPlayerWithIssue(finalNextPlayer, "banned");
-                                // Remove them from the reconnection queue but keep them in limbo
-                                playerManager.removePlayer(finalNextPlayer);
-                                return;
-                            }
-
-
-                            finalNextPlayer.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + reason + "</red>"));
-                        }
-                    }
-                });
-
-                //playerManager.removePlayer(nextPlayer);
-            } catch (CompletionException exception) {
-                // Prevent console from being spammed when a server is offline and ping-check is disabled
+                reconnectPlayer(nextPlayer);
             }
         }).repeat(reconnectInterval, TimeUnit.SECONDS).schedule();
 
@@ -405,5 +286,130 @@ public class VelocityLimboHandler {
 
     public static boolean isQueueEnabled() {
         return queueEnabled;
+    }
+
+    private static void reconnectPlayer(Player player) {
+        if (player == null || !player.isActive()) return;
+
+        RegisteredServer previousServer = playerManager.getPreviousServer(player);
+
+        // If enabled, check if a server responds to pings before connecting
+        try {
+            try {
+                previousServer.ping().join(); // Check if the server is online
+            } catch (CompletionException completionException) {
+                // Server failed to respond to ping request, return to prevent spam
+                return;
+            }
+
+            // Check if maintenance mode is enabled on Backend Server
+            if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
+                // Check if the user has bypass permission for Maintenance or is admin
+                if (player.hasPermission("maintenance.admin")
+                        || player.hasPermission("maintenance.bypass")
+                        || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())) {
+                    logger.info("[Maintenance Bypass] " + player.getUsername() + " bypassed queue to join " + previousServer.getServerInfo().getName());
+                } else {
+                    return;
+                }
+            }
+
+            Utility.logInformational(String.format("Connecting %s to %s", player.getUsername(), previousServer.getServerInfo().getName()));
+
+            player.createConnectionRequest(previousServer).connect().whenComplete(((result, throwable) -> {
+                if (result.isSuccessful()) {
+                    Utility.logInformational(String.format("Successfully reconnected %s to %s", player.getUsername(), previousServer.getServerInfo().getName()));
+                    playerManager.removePlayerIssue(player);
+                    return;
+                }
+
+                Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s",
+                        player.getUsername(),
+                        previousServer.getServerInfo().getName(),
+                        result.getStatus()));
+
+                if (throwable != null) {
+                    // Get the error message from throwable
+                    String errorMessage = throwable.getMessage();
+                    if (errorMessage == null) errorMessage = "";
+
+                    // Also check the result component if available
+                    String reasonFromComponent = "";
+                    if (result.getReasonComponent().isPresent()) {
+                        reasonFromComponent = PlainTextComponentSerializer.plainText().serialize(result.getReasonComponent().get());
+                    }
+
+                    // Check both the throwable message and the component reason
+                    String combinedErrorMessage = (errorMessage + " " + reasonFromComponent).toLowerCase();
+
+                    if (combinedErrorMessage.contains("ban") || combinedErrorMessage.contains("banned")) {
+                        String formattedMsg = MessageFormatter.formatMessage(bannedMsg, player);
+
+                        player.sendMessage(miniMessage.deserialize(formattedMsg));
+
+                        // Mark them with an issue instead of kicking
+                        playerManager.addPlayerWithIssue(player, "banned");
+
+                        // Remove them from the reconnection queue to avoid blocking others
+                        playerManager.removePlayerFromQueue(player);
+                        return;
+                    }
+
+                    if (combinedErrorMessage.contains("whitelist") || combinedErrorMessage.contains("not whitelisted")) {
+                        String formattedMsg = MessageFormatter.formatMessage(whitelistedMsg, player);
+
+                        player.sendMessage(miniMessage.deserialize(formattedMsg));
+
+                        // Mark them with an issue instead of kicking
+                        playerManager.addPlayerWithIssue(player, "not_whitelisted");
+
+                        // Remove them from the reconnection queue to avoid blocking others
+                        playerManager.removePlayerFromQueue(player);
+                        return;
+                    }
+
+                    // Handle any other connection errors
+                    player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + (errorMessage.isEmpty() ? reasonFromComponent : errorMessage) + "</red>"));
+                } else {
+                    // Handle case where we have a result but no throwable
+                    Optional<Component> reasonComponent = result.getReasonComponent();
+
+                    if (reasonComponent.isPresent()) {
+                        String reason = PlainTextComponentSerializer.plainText().serialize(reasonComponent.get()).toLowerCase();
+
+                        if (reason.contains("ban") || reason.contains("banned")) {
+                            String formattedMsg = MessageFormatter.formatMessage(bannedMsg, player);
+
+                            player.sendMessage(miniMessage.deserialize(formattedMsg));
+
+                            // Mark them with an issue instead of kicking
+                            playerManager.addPlayerWithIssue(player, "banned");
+
+                            // Remove them from the reconnection queue to avoid blocking others
+                            playerManager.removePlayerFromQueue(player);
+                            return;
+                        }
+
+                        if (reason.contains("whitelist") || reason.contains("not whitelisted")) {
+                            String formattedMsg = MessageFormatter.formatMessage(whitelistedMsg, player);
+
+                            player.sendMessage(miniMessage.deserialize(formattedMsg));
+
+                            // Mark them with an issue instead of kicking
+                            playerManager.addPlayerWithIssue(player, "not_whitelisted");
+
+                            // Remove them from the reconnection queue to avoid blocking others
+                            playerManager.removePlayerFromQueue(player);
+                            return;
+                        }
+
+                        // Handle any other connection errors
+                        player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + reason + "</red>"));
+                    }
+                }
+            }));
+        } catch (CompletionException exception) {
+            // Prevent console from being spammed when a server is offline and ping-check is disabled
+        }
     }
 }

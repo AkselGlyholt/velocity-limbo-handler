@@ -2,7 +2,6 @@ package com.akselglyholt.velocityLimboHandler.listeners;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
-import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.ServerPostConnectEvent;
@@ -11,47 +10,67 @@ import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import org.jetbrains.annotations.NotNull;
 
+import java.net.InetSocketAddress;
+import java.util.List;
+
 public class ConnectionListener {
+
     @Subscribe
     public void onPlayerPostConnect(@NotNull ServerPostConnectEvent event) {
         Player player = event.getPlayer();
-        // Todo add config check to see if player should bypass checks
 
-        if (player.getCurrentServer().isEmpty()) {
-            VelocityLimboHandler.getLogger().severe(String.format("Current server wasn't present for %s.", player.getUsername()));
+        RegisteredServer limbo = VelocityLimboHandler.getLimboServer();
+        RegisteredServer currentServer = player.getCurrentServer().map(ServerConnection::getServer).orElse(null);
+        RegisteredServer previousServer = event.getPreviousServer();
+
+        if (currentServer == null) {
+            VelocityLimboHandler.getLogger().severe(String.format("Current server was null for %s.", player.getUsername()));
             return;
         }
 
-        ServerConnection currentServerConnection = player.getCurrentServer().get();
-
-        RegisteredServer previousServer = event.getPreviousServer();
-        if (previousServer == null) {
-            // Check if player was on another server before
-            if (VelocityLimboHandler.getPlayerManager().isPlayerRegistered(player)) {
-                previousServer = VelocityLimboHandler.getPlayerManager().getPreviousServer(player);
-            } else {
-                // Didn't have previous server, so connect to direct connection server. e.g. Lobby
-                previousServer = VelocityLimboHandler.getDirectConnectServer();
-            }
-        }
-
-        // If a player gets redirected from Limbo to another server, remove them from the Map
-        if (Utility.doServerNamesMatch(previousServer, VelocityLimboHandler.getLimboServer())) {
+        // Remove player from queue if they left Limbo and joined another server
+        if (previousServer != null && Utility.doServerNamesMatch(previousServer, limbo)) {
             VelocityLimboHandler.getPlayerManager().removePlayer(player);
             return;
         }
 
-        // IF a player gets redirected to Limbo from another server, add them to the Map
-        if (Utility.doServerNamesMatch(currentServerConnection.getServer(), VelocityLimboHandler.getLimboServer())) {
-            VelocityLimboHandler.getPlayerManager().addPlayer(player, previousServer);
+        // Handle players who just joined Limbo
+        if (Utility.doServerNamesMatch(currentServer, limbo)) {
+            // Determine intended server from forced host if available
+            String virtualHost = player.getVirtualHost().map(InetSocketAddress::getHostName).orElse(null);
+
+            RegisteredServer intendedTarget = null;
+
+            if (virtualHost != null) {
+                List<String> forcedServers = VelocityLimboHandler.getProxyServer()
+                        .getConfiguration()
+                        .getForcedHosts()
+                        .get(virtualHost);
+
+                if (forcedServers != null && !forcedServers.isEmpty()) {
+                    intendedTarget = VelocityLimboHandler.getProxyServer()
+                            .getServer(forcedServers.get(0))
+                            .orElse(null);
+                }
+            }
+
+            // Fallback to previous server or default
+            if (intendedTarget == null) {
+                if (previousServer != null) {
+                    intendedTarget = previousServer;
+                } else {
+                    intendedTarget = VelocityLimboHandler.getDirectConnectServer();
+                }
+            }
+
+            VelocityLimboHandler.getPlayerManager().addPlayer(player, intendedTarget);
         }
     }
 
-
-    // Remove anyone who disconnects from the proxy from the playerData Map.
     @Subscribe
     public void onDisconnect(@NotNull DisconnectEvent event) {
-        VelocityLimboHandler.getPlayerManager().removePlayer(event.getPlayer());
-        VelocityLimboHandler.getPlayerManager().removePlayerIssue(event.getPlayer());
+        Player player = event.getPlayer();
+        VelocityLimboHandler.getPlayerManager().removePlayer(player);
+        VelocityLimboHandler.getPlayerManager().removePlayerIssue(player);
     }
 }
