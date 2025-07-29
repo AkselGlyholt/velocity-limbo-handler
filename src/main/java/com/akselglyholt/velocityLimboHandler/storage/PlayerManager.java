@@ -23,8 +23,6 @@ public class PlayerManager {
         this.playerData = new LinkedHashMap<>();
 
         queuePositionMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("queuePositionJoin"));
-
-        VelocityLimboHandler.getLogger().info("⚠️ New PlayerManager instance created!");
     }
 
     public void addPlayer(Player player, RegisteredServer registeredServer) {
