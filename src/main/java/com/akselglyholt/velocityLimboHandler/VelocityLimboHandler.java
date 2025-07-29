@@ -5,7 +5,7 @@ import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
 import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
 import com.akselglyholt.velocityLimboHandler.listeners.PreConnectEventListener;
-import com.akselglyholt.velocityLimboHandler.misc.MessageFormater;
+import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.google.inject.Inject;
@@ -30,7 +30,6 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bstats.charts.SingleLineChart;
 import org.bstats.velocity.Metrics;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -46,7 +45,6 @@ import java.util.logging.Logger;
 
 @Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", authors = "Aksel Glyholt", version = "${project.version}")
 public class VelocityLimboHandler {
-    private static final org.slf4j.Logger log = LoggerFactory.getLogger(VelocityLimboHandler.class);
     private static ProxyServer proxyServer;
     private static Logger logger;
     private static RegisteredServer limboServer;
@@ -302,20 +300,24 @@ public class VelocityLimboHandler {
                         String combinedErrorMessage = (errorMessage + " " + reasonFromComponent).toLowerCase();
 
                         if (combinedErrorMessage.contains("ban") || combinedErrorMessage.contains("banned")) {
-                            String formatedMsg = MessageFormater.formatMessage(bannedMsg, finalNextPlayer);
+                            String formatedMsg = MessageFormatter.formatMessage(bannedMsg, finalNextPlayer);
 
                             finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
                             // Mark them with an issue instead of kicking
                             playerManager.addPlayerWithIssue(finalNextPlayer, "banned");
+                            // Remove them from the reconnection queue to avoid blocking others
+                            playerManager.removePlayerFromQueue(finalNextPlayer);
                             return;
                         }
 
                         if (combinedErrorMessage.contains("whitelist") || combinedErrorMessage.contains("not whitelisted")) {
-                            String formatedMsg = MessageFormater.formatMessage(whitelistedMsg, finalNextPlayer);
+                            String formatedMsg = MessageFormatter.formatMessage(whitelistedMsg, finalNextPlayer);
 
                             finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
                             // Mark them with an issue instead of kicking
                             playerManager.addPlayerWithIssue(finalNextPlayer, "not_whitelisted");
+                            // Remove them from the reconnection queue to avoid blocking others
+                            playerManager.removePlayerFromQueue(finalNextPlayer);
                             return;
                         }
 
@@ -328,7 +330,7 @@ public class VelocityLimboHandler {
                             String reason = PlainTextComponentSerializer.plainText().serialize(reasonComponent.get()).toLowerCase();
 
                             if (reason.contains("whitelist") || reason.contains("not whitelisted")) {
-                                String formatedMsg = MessageFormater.formatMessage(whitelistedMsg, finalNextPlayer);
+                                String formatedMsg = MessageFormatter.formatMessage(whitelistedMsg, finalNextPlayer);
 
                                 finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
                                 // Instead of kicking and removing the player, mark them with an issue
@@ -339,7 +341,7 @@ public class VelocityLimboHandler {
                             }
 
                             if (reason.contains("ban") || reason.contains("banned")) {
-                                String formatedMsg = MessageFormater.formatMessage(bannedMsg, finalNextPlayer);
+                                String formatedMsg = MessageFormatter.formatMessage(bannedMsg, finalNextPlayer);
 
                                 finalNextPlayer.sendMessage(miniMessage.deserialize(formatedMsg));
                                 // Instead of kicking and removing the player, mark them with an issue
@@ -369,11 +371,11 @@ public class VelocityLimboHandler {
                     String issue = playerManager.getConnectionIssue(player);
 
                     if ("banned".equals(issue)) {
-                        String formatedMsg = MessageFormater.formatMessage(bannedMsg, player);
+                        String formatedMsg = MessageFormatter.formatMessage(bannedMsg, player);
 
                         player.sendMessage(miniMessage.deserialize(formatedMsg));
                     } else if ("not_whitelisted".equals(issue)) {
-                        String formatedMsg = MessageFormater.formatMessage(whitelistedMsg, player);
+                        String formatedMsg = MessageFormatter.formatMessage(whitelistedMsg, player);
 
                         player.sendMessage(miniMessage.deserialize(formatedMsg));
                     }
@@ -383,7 +385,7 @@ public class VelocityLimboHandler {
                 RegisteredServer previousServer = playerManager.getPreviousServer(player);
 
                 if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
-                    String formatedMsg = MessageFormater.formatMessage(maintenanceModeMsg, player);
+                    String formatedMsg = MessageFormatter.formatMessage(maintenanceModeMsg, player);
 
                     player.sendMessage(miniMessage.deserialize(formatedMsg));
                     return;
@@ -394,7 +396,7 @@ public class VelocityLimboHandler {
 
                 int position = playerManager.getQueuePosition(player);
                 if (position == -1) continue;
-                String formatedQueuePositionMsg = MessageFormater.formatMessage(queuePositionMsg, player);
+                String formatedQueuePositionMsg = MessageFormatter.formatMessage(queuePositionMsg, player);
 
                 player.sendMessage(miniMessage.deserialize(formatedQueuePositionMsg));
             }

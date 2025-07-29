@@ -9,7 +9,6 @@ import com.velocitypowered.api.proxy.ServerConnection;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
-import java.util.Map;
 import java.util.Optional;
 
 public class CommandExecuteEventListener {
@@ -28,7 +27,6 @@ public class CommandExecuteEventListener {
         Optional<ServerConnection> serverConnection = player.getCurrentServer();
 
         if (serverConnection.isPresent()) {
-            String serverName = serverConnection.get().getServerInfo().getName();
             String command = event.getCommand();
             String commandName = command.split(" ")[0].toLowerCase(); // Extract command name
 
