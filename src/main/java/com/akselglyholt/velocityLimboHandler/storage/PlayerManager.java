@@ -120,4 +120,26 @@ public class PlayerManager {
         }
         playerData.keySet().removeIf(p -> !p.isActive());
     }
+
+    /**
+     * @param server the server of which you need to find the first whitelisted/permission allow player
+     * @return Player object
+     */
+    public static Player findFirstMaintenanceAllowedPlayer(RegisteredServer server) {
+        // Find the queue for the server
+        Queue<Player> queue = VelocityLimboHandler.getPlayerManager().reconnectQueues.get(server);
+        if (queue == null) return null;
+
+        // Loop through all players and check if any match is found
+        for (Player player : queue) {
+            if (player.hasPermission("maintenance.admin")
+                    || player.hasPermission("maintenance.bypass")
+                    || player.hasPermission("maintenance.singleserver.bypass." + server.getServerInfo().getName())
+                    || Utility.playerMaintenanceWhitelisted(player)) {
+                return player;
+            }
+        }
+
+        return null;
+    }
 }

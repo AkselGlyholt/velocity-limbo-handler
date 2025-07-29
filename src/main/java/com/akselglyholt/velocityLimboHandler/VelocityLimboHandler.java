@@ -226,21 +226,43 @@ public class VelocityLimboHandler {
                 for (RegisteredServer server : proxyServer.getAllServers()) {
                     // Queue mode – get the next player from the queue
                     if (!playerManager.hasQueuedPlayers(server)) continue;
-                    Player nextPlayer = playerManager.getNextQueuedPlayer(server);
 
-                    reconnectPlayer(nextPlayer);
+                    // Check if the server is in Maintenance mode
+                    if (Utility.isServerInMaintenance(server.getServerInfo().getName())) {
+                        // Is in Maintenance mode, so find first player in queue that can join
+                        Player whitelistedPlayer = PlayerManager.findFirstMaintenanceAllowedPlayer(server);
+
+                        if (whitelistedPlayer != null && whitelistedPlayer.isActive()) {
+                            reconnectPlayer(whitelistedPlayer);
+                        }
+                    } else {
+                        // Is not in Maintenance mode, so carry on with normal queue.
+                        Player nextPlayer = playerManager.getNextQueuedPlayer(server);
+                        reconnectPlayer(nextPlayer);
+                    }
                 }
             } else {
-                Player nextPlayer = null;
-
                 for (Player player : connectedPlayers) {
                     if (!playerManager.hasConnectionIssue(player) && player.isActive()) {
-                        nextPlayer = player;
+                        // Check if the server is in maintenance mode
+                        RegisteredServer previousServer = playerManager.getPreviousServer(player);
+
+                        if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
+                            // Check if the player has whitelist or another bypass to join, or continue to next player
+                            if (player.hasPermission("maintenance.admin")
+                                    || player.hasPermission("maintenance.bypass")
+                                    || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())
+                                    || Utility.playerMaintenanceWhitelisted(player)) {
+                                // Can't join server whilst in Maintenance, so continue to next
+                                continue;
+                            }
+                        }
+
+                        reconnectPlayer(player);
                         break;
                     }
                 }
 
-                reconnectPlayer(nextPlayer);
             }
         }).repeat(reconnectInterval, TimeUnit.SECONDS).schedule();
 
@@ -307,7 +329,8 @@ public class VelocityLimboHandler {
                 // Check if the user has bypass permission for Maintenance or is admin
                 if (player.hasPermission("maintenance.admin")
                         || player.hasPermission("maintenance.bypass")
-                        || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())) {
+                        || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())
+                        || Utility.playerMaintenanceWhitelisted(player)) {
                     logger.info("[Maintenance Bypass] " + player.getUsername() + " bypassed queue to join " + previousServer.getServerInfo().getName());
                 } else {
                     return;
