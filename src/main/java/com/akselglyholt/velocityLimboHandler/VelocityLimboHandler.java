@@ -262,7 +262,10 @@ public class VelocityLimboHandler {
                 if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
                     // Check if the user has bypass permission for Maintenance or is admin
 
-                    if (nextPlayer.hasPermission("maintenance.admin") || nextPlayer.hasPermission("maintenance.bypass") || nextPlayer.hasPermission("maintenance.singleserver.bypass." + limboName)) {
+                    if (nextPlayer.hasPermission("maintenance.admin")
+                            || nextPlayer.hasPermission("maintenance.bypass")
+                            || nextPlayer.hasPermission("maintenance.singleserver.bypass." + limboName)
+                            || Utility.playerMaintenanceWhitelisted(nextPlayer)) {
                         logger.info(nextPlayer.getUsername() + " bypassed maintenance to " + previousServer.getServerInfo().getName() + " from " + limboName + " Server");
                     } else {
                         return;

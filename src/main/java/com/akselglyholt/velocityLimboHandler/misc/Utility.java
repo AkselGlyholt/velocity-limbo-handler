@@ -9,7 +9,9 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 public class Utility {
     private static final MiniMessage miniMessage = MiniMessage.miniMessage();
@@ -148,4 +150,49 @@ public class Utility {
             return false; // Assume not in maintenance if check fails
         }
     }
+
+    /**
+     *
+     * @param player The player you want to check is whitelisted
+     * @return true if whitelisted, otherwise returns false
+     */
+    public static boolean playerMaintenanceWhitelisted(Player player) {
+        if (!hasMaintenance()) {
+            return false;
+        }
+
+        try {
+            Object maintenanceAPI = VelocityLimboHandler.getMaintenanceAPI();
+            if (maintenanceAPI == null) {
+                return false;
+            }
+
+            // Use reflection to get the settings object
+            Object settings = maintenanceAPI.getClass()
+                    .getMethod("getSettings")
+                    .invoke(maintenanceAPI);
+
+            if (settings == null) {
+                return false;
+            }
+
+            // Use reflection to get the whitelist map
+            java.lang.reflect.Method getWhitelistedPlayersMethod = settings.getClass().getMethod("getWhitelistedPlayers");
+            Object whitelistMapObj = getWhitelistedPlayersMethod.invoke(settings);
+
+            if (!(whitelistMapObj instanceof Map<?,?>)) {
+                return false;
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<UUID, String> whitelistedPlayers = (Map<UUID, String>) whitelistMapObj;
+
+            return whitelistedPlayers.containsKey(player.getUniqueId());
+
+        } catch (Exception e) {
+            VelocityLimboHandler.getLogger().warning("Failed to check if player is whitelisted in Maintenance plugin: " + e.getMessage());
+            return false;
+        }
+    }
+
 }
