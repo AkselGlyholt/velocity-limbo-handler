@@ -1,7 +1,7 @@
 # 🌐 VelocityLimboHandler | Fallback Server Handler for Velocity  
 Effortlessly manage player reconnections with a structured queue system!  
 
-[![Maintenance Status](https://img.shields.io/badge/maintenance-passively--maintained-yellowgreen.svg)](https://github.com/AkselGlyholt/velocity-limbo-handler)  
+[![Active Development](https://img.shields.io/badge/Maintenance%20Level-Actively%20Developed-brightgreen.svg)](https://gist.github.com/cheerfulstoic/d107229326a01ff0f333a1d3476e068d)  
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-brightgreen)](https://github.com/AkselGlyholt/velocity-limbo-handler/blob/main/LICENSE)  
 [![Download](https://img.shields.io/badge/Download-latest%20release-brightgreen)](https://github.com/AkselGlyholt/velocity-limbo-handler/releases/latest)  
 
