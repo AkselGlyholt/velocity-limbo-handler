@@ -31,9 +31,9 @@ public class PlayerManager {
 
     public void addPlayer(Player player, RegisteredServer registeredServer) {
         // Don't override if the player is already registered
-        if (!this.playerData.containsKey(player)) {
-            this.playerData.put(player, registeredServer);
-        }
+        if (this.playerData.containsKey(player)) return;
+
+        this.playerData.put(player, registeredServer);
 
         Utility.sendWelcomeMessage(player, null);
 
