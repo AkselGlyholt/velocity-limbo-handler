@@ -4,7 +4,6 @@ import com.akselglyholt.velocityLimboHandler.commands.CommandBlockRule;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
 import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
-import com.akselglyholt.velocityLimboHandler.listeners.PreConnectEventListener;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
@@ -200,7 +199,6 @@ public class VelocityLimboHandler {
         }
 
         eventManger.register(this, new ConnectionListener());
-        eventManger.register(this, new PreConnectEventListener());
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker));
 
         int reconnectInterval = config.getInt(Route.from("task-interval"));
