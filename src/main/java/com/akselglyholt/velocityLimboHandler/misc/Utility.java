@@ -27,7 +27,6 @@ public class Utility {
     public static void sendWelcomeMessage(Player player, String reason) {
         if (reason == null) reason = "unknown";
 
-        // TODO: When config is added, add a check for whether messages should be sent
         Component message = switch (reason.toLowerCase()) {
             case "afk" ->
                     miniMessage.deserialize("<yellow>⏳ You were inactive for too long and moved to Limbo.</yellow>\n" +
@@ -57,13 +56,7 @@ public class Utility {
         return null;
     }
 
-    public static RegisteredServer getServerFromProperty(String propertyName) {
-        // TODO: Add this logic, uses hard coded value for now!
-        return getServerByName("limbo");
-    }
-
     public static void logInformational(String message) {
-        // TODO: Add check in config for these logs
         VelocityLimboHandler.getLogger().info(message);
     }
 

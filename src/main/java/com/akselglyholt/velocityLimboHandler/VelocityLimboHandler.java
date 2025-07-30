@@ -365,31 +365,8 @@ public class VelocityLimboHandler {
                     // Check both the throwable message and the component reason
                     String combinedErrorMessage = (errorMessage + " " + reasonFromComponent).toLowerCase();
 
-                    if (combinedErrorMessage.contains("ban") || combinedErrorMessage.contains("banned")) {
-                        String formattedMsg = MessageFormatter.formatMessage(bannedMsg, player);
-
-                        player.sendMessage(miniMessage.deserialize(formattedMsg));
-
-                        // Mark them with an issue instead of kicking
-                        playerManager.addPlayerWithIssue(player, "banned");
-
-                        // Remove them from the reconnection queue to avoid blocking others
-                        playerManager.removePlayerFromQueue(player);
-                        return;
-                    }
-
-                    if (combinedErrorMessage.contains("whitelist") || combinedErrorMessage.contains("not whitelisted")) {
-                        String formattedMsg = MessageFormatter.formatMessage(whitelistedMsg, player);
-
-                        player.sendMessage(miniMessage.deserialize(formattedMsg));
-
-                        // Mark them with an issue instead of kicking
-                        playerManager.addPlayerWithIssue(player, "not_whitelisted");
-
-                        // Remove them from the reconnection queue to avoid blocking others
-                        playerManager.removePlayerFromQueue(player);
-                        return;
-                    }
+                    // Notify user of their issue, and them to issue list
+                    if (playerConnectIssue(player, combinedErrorMessage)) return;
 
                     // Handle any other connection errors
                     player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + (errorMessage.isEmpty() ? reasonFromComponent : errorMessage) + "</red>"));
@@ -400,31 +377,8 @@ public class VelocityLimboHandler {
                     if (reasonComponent.isPresent()) {
                         String reason = PlainTextComponentSerializer.plainText().serialize(reasonComponent.get()).toLowerCase();
 
-                        if (reason.contains("ban") || reason.contains("banned")) {
-                            String formattedMsg = MessageFormatter.formatMessage(bannedMsg, player);
-
-                            player.sendMessage(miniMessage.deserialize(formattedMsg));
-
-                            // Mark them with an issue instead of kicking
-                            playerManager.addPlayerWithIssue(player, "banned");
-
-                            // Remove them from the reconnection queue to avoid blocking others
-                            playerManager.removePlayerFromQueue(player);
-                            return;
-                        }
-
-                        if (reason.contains("whitelist") || reason.contains("not whitelisted")) {
-                            String formattedMsg = MessageFormatter.formatMessage(whitelistedMsg, player);
-
-                            player.sendMessage(miniMessage.deserialize(formattedMsg));
-
-                            // Mark them with an issue instead of kicking
-                            playerManager.addPlayerWithIssue(player, "not_whitelisted");
-
-                            // Remove them from the reconnection queue to avoid blocking others
-                            playerManager.removePlayerFromQueue(player);
-                            return;
-                        }
+                        // Notify user of their issue, and them to issue list
+                        if (playerConnectIssue(player, reason)) return;
 
                         // Handle any other connection errors
                         player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + reason + "</red>"));
@@ -434,5 +388,35 @@ public class VelocityLimboHandler {
         } catch (CompletionException exception) {
             // Prevent console from being spammed when a server is offline and ping-check is disabled
         }
+    }
+
+    private static boolean playerConnectIssue(Player player, String reason) {
+        if (reason.contains("ban") || reason.contains("banned")) {
+            String formattedMsg = MessageFormatter.formatMessage(bannedMsg, player);
+
+            player.sendMessage(miniMessage.deserialize(formattedMsg));
+
+            // Mark them with an issue instead of kicking
+            playerManager.addPlayerWithIssue(player, "banned");
+
+            // Remove them from the reconnection queue to avoid blocking others
+            playerManager.removePlayerFromQueue(player);
+            return true;
+        }
+
+        if (reason.contains("whitelist") || reason.contains("not whitelisted")) {
+            String formattedMsg = MessageFormatter.formatMessage(whitelistedMsg, player);
+
+            player.sendMessage(miniMessage.deserialize(formattedMsg));
+
+            // Mark them with an issue instead of kicking
+            playerManager.addPlayerWithIssue(player, "not_whitelisted");
+
+            // Remove them from the reconnection queue to avoid blocking others
+            playerManager.removePlayerFromQueue(player);
+            return true;
+        }
+
+        return false;
     }
 }
