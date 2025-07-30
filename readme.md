@@ -1,8 +1,8 @@
 # 🌐 VelocityLimboHandler | Fallback Server Handler for Velocity  
 Effortlessly manage player reconnections with a structured queue system!  
 
-[![Active Development](https://img.shields.io/badge/Maintenance%20Level-Actively%20Developed-brightgreen.svg)](https://gist.github.com/cheerfulstoic/d107229326a01ff0f333a1d3476e068d)  
-[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-brightgreen)](https://github.com/AkselGlyholt/velocity-limbo-handler/blob/main/LICENSE)  
+[![Active Development](https://img.shields.io/badge/Maintenance%20Level-Actively%20Developed-brightgreen.svg)](https://gist.github.com/cheerfulstoic/d107229326a01ff0f333a1d3476e068d)
+[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-brightgreen)](https://github.com/AkselGlyholt/velocity-limbo-handler/blob/main/LICENSE)
 [![Download](https://img.shields.io/badge/Download-latest%20release-brightgreen)](https://github.com/AkselGlyholt/velocity-limbo-handler/releases/latest)  
 
 ## About
@@ -21,8 +21,6 @@ VelocityLimboHandler is a simple yet powerful **Velocity proxy plugin** that man
 4. Configure the **proxy, Limbo server, and plugin** as needed.
 5. Restart the proxy once again.
 
-**Important:** To prevent exploits, it's recommended to disable the `/server` command inside the config, or using [LuckPerms](https://luckperms.net/) with **context-based permissions**.
-
 ---
 
 ## Configuration
@@ -30,16 +28,18 @@ After installation, configure the plugin via:
 `plugins/velocity-limbo-handler/config.yml`
 
 ### **Required Settings:**
-**`limbo-name`** (default: `Limbo`) – Name of the Limbo server in Velocity.  
-**`direct-connect-server`** (default: `default`) – The server where direct connections should be sent.  
+* **`limbo-name`** (default: `Limbo`) – Name of the Limbo server in Velocity.  
+* **`direct-connect-server`** (default: `default`) – The server where direct connections should be sent.  
 
 ### **Optional Settings:**
-**`task-interval`** (default: `3`) – Time (seconds) between connection attempts.  
-**`queue-notify-interval`** (default: `30`) – How often players are notified of their queue position.  
-**`disabled-commands`** (default: `["server", "lobby", "hub"]` – Commands that won't work inside the limbo server.  
+* **`task-interval`** (default: `3`) – Time (seconds) between connection attempts.  
+* **`queue-notify-interval`** (default: `30`) – How often players are notified of their queue position.  
+* **`disabled-commands`** (default: `["server", "lobby", "hub"]` – Commands that won't work inside the limbo server.
 
-Messages can be configured inside:
-`plugins/velocity-limbo-handler/messages.yml`
+* `messages.yml` is now editable for all in-plugin feedback texts
+* Maintenance integration is automatic if you're using a compatiable plugin. (Check Wiki)
+* Disable commands inside Limbo to prevent exploitation via `/server`
+
 
 ---
 
