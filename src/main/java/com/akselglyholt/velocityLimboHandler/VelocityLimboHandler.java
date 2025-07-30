@@ -45,7 +45,7 @@ import java.util.logging.Logger;
 @Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", authors = "Aksel Glyholt", version = "${project.version}")
 public class VelocityLimboHandler {
     private static ProxyServer proxyServer;
-    private static Logger logger;
+    private static Logger logger = Logger.getLogger("Limbo Handler");
     private static RegisteredServer limboServer;
     private static RegisteredServer directConnectServer;
 
@@ -71,9 +71,9 @@ public class VelocityLimboHandler {
     private static String queuePositionMsg;
 
     @Inject
-    public VelocityLimboHandler(ProxyServer server, Logger loggerInstance, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
+    public VelocityLimboHandler(ProxyServer server, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
         proxyServer = server;
-        logger = loggerInstance;
+        //logger = loggerInstance;
 
         try {
             config = YamlDocument.create(new File(dataDirectory.toFile(), "config.yml"), Objects.requireNonNull(getClass().getResourceAsStream("/config.yml")), GeneralSettings.DEFAULT, LoaderSettings.builder().setAutoUpdate(true).build(), DumperSettings.DEFAULT, UpdaterSettings.builder().setVersioning(new BasicVersioning("file-version")).setOptionSorting(UpdaterSettings.OptionSorting.SORT_BY_DEFAULTS).build());
@@ -105,8 +105,6 @@ public class VelocityLimboHandler {
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
-        logger.info("Loading Limbo Handler!");
-
         int pluginId = 26682;
         metrics = metricsFactory.make(this, pluginId);
 
