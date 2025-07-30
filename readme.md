@@ -30,13 +30,13 @@ After installation, configure the plugin via:
 `plugins/velocity-limbo-handler/config.yml`
 
 ### **Required Settings:**
-**`limbo-name`** (default: `Limbo`) – Name of the Limbo server in Velocity.
-**`direct-connect-server`** (default: `default`) – The server where direct connections should be sent.
+**`limbo-name`** (default: `Limbo`) – Name of the Limbo server in Velocity.  
+**`direct-connect-server`** (default: `default`) – The server where direct connections should be sent.  
 
 ### **Optional Settings:**
-**`task-interval`** (default: `3`) – Time (seconds) between connection attempts.
-**`queue-notify-interval`** (default: `30`) – How often players are notified of their queue position.
-**`disabled-commands`** (default: `["server", "lobby", "hub"]` – Commands that won't work inside the limbo server.
+**`task-interval`** (default: `3`) – Time (seconds) between connection attempts.  
+**`queue-notify-interval`** (default: `30`) – How often players are notified of their queue position.  
+**`disabled-commands`** (default: `["server", "lobby", "hub"]` – Commands that won't work inside the limbo server.  
 
 Messages can be configured inside:
 `plugins/velocity-limbo-handler/messages.yml`
