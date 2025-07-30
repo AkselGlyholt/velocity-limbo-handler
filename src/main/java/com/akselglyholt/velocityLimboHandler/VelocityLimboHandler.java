@@ -42,7 +42,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
-@Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", authors = "Aksel Glyholt", version = "${project.version}")
+@Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", authors = "Aksel Glyholt", version = VersionInfo.VERSION)
 public class VelocityLimboHandler {
     private static ProxyServer proxyServer;
     private static Logger logger = Logger.getLogger("Limbo Handler");
