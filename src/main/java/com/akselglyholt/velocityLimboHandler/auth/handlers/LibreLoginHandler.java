@@ -56,7 +56,6 @@ public class LibreLoginHandler implements AuthHandler {
 
         proxy.getScheduler().buildTask(VelocityLimboHandler.getInstance(), () -> {
             if (blocker.isBlocked(player.getUniqueId())) {
-                logger.info("[VLH] Player " + player.getUsername() + " failed to authenticate in time — kicking.");
                 player.disconnect(MiniMessage.miniMessage().deserialize("<red>Authentication timed out. Please rejoin.</red>"));
                 blocker.unblock(player.getUniqueId()); // Clean up
             }
