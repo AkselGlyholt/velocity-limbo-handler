@@ -90,7 +90,8 @@ public class LibreLoginHandler implements AuthHandler {
             for (var f : types.getClass().getFields()) {
                 try {
                     Object val = f.get(types);
-                } catch (IllegalAccessException ignored) {}
+                } catch (IllegalAccessException ignored) {
+                }
             }
 
             // Use the exact field name from your logs
@@ -139,7 +140,11 @@ public class LibreLoginHandler implements AuthHandler {
     }
 
     private static java.lang.reflect.Method safeMethod(Class<?> c, String name, Class<?>... params) {
-        try { return c.getMethod(name, params); } catch (NoSuchMethodException e) { return null; }
+        try {
+            return c.getMethod(name, params);
+        } catch (NoSuchMethodException e) {
+            return null;
+        }
     }
 
     private Player extractPlayerFromLibreEvent(Object event) {
@@ -167,7 +172,8 @@ public class LibreLoginHandler implements AuthHandler {
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return null;
     }
 
