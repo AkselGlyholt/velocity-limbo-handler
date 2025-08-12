@@ -1,10 +1,13 @@
 package com.akselglyholt.velocityLimboHandler;
 
+import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlockRule;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
 import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
+import com.akselglyholt.velocityLimboHandler.misc.InMemoryReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
+import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.google.inject.Inject;
@@ -44,6 +47,7 @@ import java.util.logging.Logger;
 
 @Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", authors = "Aksel Glyholt", version = VersionInfo.VERSION)
 public class VelocityLimboHandler {
+    private static VelocityLimboHandler instance;
     private static ProxyServer proxyServer;
     private static Logger logger = Logger.getLogger("Limbo Handler");
     private static RegisteredServer limboServer;
@@ -51,6 +55,8 @@ public class VelocityLimboHandler {
 
     private static PlayerManager playerManager;
     private static CommandBlocker commandBlocker;
+    private static ReconnectBlocker reconnectBlocker;
+    private static AuthManager authManager;
 
     private static YamlDocument config;
     private static YamlDocument messageConfig;
@@ -73,6 +79,7 @@ public class VelocityLimboHandler {
     @Inject
     public VelocityLimboHandler(ProxyServer server, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
         proxyServer = server;
+        instance = this;
         //logger = loggerInstance;
 
         try {
@@ -100,6 +107,8 @@ public class VelocityLimboHandler {
         commandBlocker = new CommandBlocker();
         metricsFactory = metricsFactoryInstance;
 
+        reconnectBlocker = new InMemoryReconnectBlocker();
+
         initializeMaintenanceIntegration();
     }
 
@@ -115,6 +124,8 @@ public class VelocityLimboHandler {
                 return limboServer != null ? limboServer.getPlayersConnected().size() : 0;
             }
         }));
+
+        authManager = new AuthManager(this, proxyServer, reconnectBlocker);
     }
 
     private void initializeMaintenanceIntegration() {
@@ -177,6 +188,9 @@ public class VelocityLimboHandler {
         return messageConfig;
     }
 
+    public static AuthManager getAuthManager() {
+        return authManager;
+    }
 
     @Subscribe
     public void onInitialize(ProxyInitializeEvent event) {
@@ -250,8 +264,9 @@ public class VelocityLimboHandler {
                             if (player.hasPermission("maintenance.admin")
                                     || player.hasPermission("maintenance.bypass")
                                     || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())
-                                    || Utility.playerMaintenanceWhitelisted(player)) {
-                                // Can't join server whilst in Maintenance, so continue to next
+                                    || Utility.playerMaintenanceWhitelisted(player)
+                                    || authManager.isAuthBlocked(player)) {
+                                // Can't join server whilst in Maintenance, or player is Auth Blocked so continue to next
                                 continue;
                             }
                         }
@@ -310,6 +325,8 @@ public class VelocityLimboHandler {
 
     private static void reconnectPlayer(Player player) {
         if (player == null || !player.isActive()) return;
+
+        if (authManager.isAuthBlocked(player)) return;
 
         RegisteredServer previousServer = playerManager.getPreviousServer(player);
 
@@ -416,5 +433,13 @@ public class VelocityLimboHandler {
         }
 
         return false;
+    }
+
+    public static VelocityLimboHandler getInstance() {
+        return instance;
+    }
+
+    public static ReconnectBlocker getReconnectBlocker() {
+        return reconnectBlocker;
     }
 }

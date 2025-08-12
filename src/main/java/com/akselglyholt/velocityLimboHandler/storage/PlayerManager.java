@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.storage;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
+import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.proxy.Player;
@@ -20,8 +21,12 @@ public class PlayerManager {
     private final Map<RegisteredServer, Queue<Player>> reconnectQueues = new ConcurrentHashMap<>();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Map<UUID, String> playerConnectionIssues = new ConcurrentHashMap<>();
-
     private static String queuePositionMsg;
+
+    private boolean isAuthBlocked(Player player) {
+        var am = VelocityLimboHandler.getAuthManager();
+        return am != null && am.isAuthBlocked(player);
+    }
 
     public PlayerManager() {
         this.playerData = new LinkedHashMap<>();
@@ -32,6 +37,8 @@ public class PlayerManager {
     public void addPlayer(Player player, RegisteredServer registeredServer) {
         // Don't override if the player is already registered
         if (this.playerData.containsKey(player)) return;
+
+        if (isAuthBlocked(player)) return;
 
         this.playerData.put(player, registeredServer);
 
@@ -51,6 +58,7 @@ public class PlayerManager {
     public void removePlayer(Player player) {
         removePlayerFromQueue(player);
         this.playerData.remove(player);
+        VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
     }
 
     public RegisteredServer getPreviousServer(Player player) {
