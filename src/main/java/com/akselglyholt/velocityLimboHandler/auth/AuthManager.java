@@ -17,7 +17,8 @@ public final class AuthManager implements AutoCloseable {
     private AuthHandler active = new NoopHandler();
 
     public AuthManager(Object plugin, ProxyServer proxy, ReconnectBlocker blocker) {
-        this.proxy = proxy; this.blocker = blocker;
+        this.proxy = proxy;
+        this.blocker = blocker;
         // order matters if multiple are present
         handlers.add(new LibreLoginHandler(proxy, blocker));
         // add future handlers here
@@ -30,11 +31,17 @@ public final class AuthManager implements AutoCloseable {
 
     private void selectActive() {
         for (var h : handlers) {
-            if (h.isActive()) { active = h; return; }
+            if (h.isActive()) {
+                active = h;
+                return;
+            }
         }
     }
 
-    @Override public void close() { active.close(); }
+    @Override
+    public void close() {
+        active.close();
+    }
 
     public boolean isAuthBlocked(Player p) {
         return this.blocker != null && blocker.isBlocked(p.getUniqueId());
