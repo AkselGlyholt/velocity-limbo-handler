@@ -58,6 +58,7 @@ public class PlayerManager {
     public void removePlayer(Player player) {
         removePlayerFromQueue(player);
         this.playerData.remove(player);
+        VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
     }
 
     public RegisteredServer getPreviousServer(Player player) {

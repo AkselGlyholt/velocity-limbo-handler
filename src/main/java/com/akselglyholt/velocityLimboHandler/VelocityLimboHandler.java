@@ -47,6 +47,7 @@ import java.util.logging.Logger;
 
 @Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", authors = "Aksel Glyholt", version = VersionInfo.VERSION)
 public class VelocityLimboHandler {
+    private static VelocityLimboHandler instance;
     private static ProxyServer proxyServer;
     private static Logger logger = Logger.getLogger("Limbo Handler");
     private static RegisteredServer limboServer;
@@ -78,6 +79,7 @@ public class VelocityLimboHandler {
     @Inject
     public VelocityLimboHandler(ProxyServer server, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
         proxyServer = server;
+        instance = this;
         //logger = loggerInstance;
 
         try {
@@ -262,8 +264,9 @@ public class VelocityLimboHandler {
                             if (player.hasPermission("maintenance.admin")
                                     || player.hasPermission("maintenance.bypass")
                                     || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())
-                                    || Utility.playerMaintenanceWhitelisted(player)) {
-                                // Can't join server whilst in Maintenance, so continue to next
+                                    || Utility.playerMaintenanceWhitelisted(player)
+                                    || authManager.isAuthBlocked(player)) {
+                                // Can't join server whilst in Maintenance, or player is Auth Blocked so continue to next
                                 continue;
                             }
                         }
@@ -430,5 +433,13 @@ public class VelocityLimboHandler {
         }
 
         return false;
+    }
+
+    public static VelocityLimboHandler getInstance() {
+        return instance;
+    }
+
+    public static ReconnectBlocker getReconnectBlocker() {
+        return reconnectBlocker;
     }
 }

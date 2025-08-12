@@ -8,6 +8,7 @@ import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
@@ -48,7 +49,18 @@ public class LibreLoginHandler implements AuthHandler {
 
         System.out.println(player.getUsername());
 
-        blocker.block(player.getUniqueId(), "auth", Duration.ofMinutes(2));
+        blocker.block(player.getUniqueId(), "auth");
+
+        // Schedule kick after timeout (configurable)
+        long timeoutSeconds = VelocityLimboHandler.getConfig().getLong("auth-timeout-seconds", 120L);
+
+        proxy.getScheduler().buildTask(VelocityLimboHandler.getInstance(), () -> {
+            if (blocker.isBlocked(player.getUniqueId())) {
+                logger.info("[VLH] Player " + player.getUsername() + " failed to authenticate in time — kicking.");
+                player.disconnect(MiniMessage.miniMessage().deserialize("<red>Authentication timed out. Please rejoin.</red>"));
+                blocker.unblock(player.getUniqueId()); // Clean up
+            }
+        }).delay(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS).schedule();
     }
 
     private void tryHook() {
