@@ -7,6 +7,8 @@ assignees: ''
 
 ---
 
+**Plugin Version:** E.g. 1.6.0
+
 **Describe the bug**
 A clear and concise description of what the bug is.
 
@@ -30,3 +32,5 @@ If applicable, add screenshots to help explain your problem.
 
 **Additional context**
 Add any other context about the problem here.
+
+**Before submitting make sure to check if there are similar issues already, and try it out on the latest plugin version**
