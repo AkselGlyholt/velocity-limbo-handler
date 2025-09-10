@@ -1,4 +1,4 @@
-file-version: 1
+file-version: 2
 
 # You can change all messages inside this file.
 # Messages use minimessage format: https://docs.advntr.dev/minimessage/index.html
@@ -21,3 +21,6 @@ queuePositionJoin: "<yellow>You are in the queue. Position: [queue-position]"
 
 # Welcome messages
 welcomeMessage: "<blue>🌌 You were sent to Limbo.</blue> \n<gray>You will be reconnected when the system allows.</gray>"
+
+# Message for when the user doesn't authenticate in time.
+authTimeout: "<red>Authentication timed out. Please rejoin.</red>"

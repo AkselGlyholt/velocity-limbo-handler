@@ -7,6 +7,7 @@ import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import dev.dejvokep.boostedyaml.route.Route;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.lang.reflect.Method;
@@ -50,8 +51,11 @@ public class LibreLoginHandler implements AuthHandler {
 
         // Schedule kick after timeout (configurable)
 
+        if (timeoutSeconds <= 0) return;
+
         proxy.getScheduler().buildTask(VelocityLimboHandler.getInstance(), () -> {
             if (blocker.isBlocked(player.getUniqueId())) {
+                player.disconnect(MiniMessage.miniMessage().deserialize(VelocityLimboHandler.getMessageConfig().getString(Route.from("authTimeout"))));
                 player.disconnect(MiniMessage.miniMessage().deserialize("<red>Authentication timed out. Please rejoin.</red>"));
                 blocker.unblock(player.getUniqueId()); // Clean up
             }
