@@ -4,7 +4,6 @@ import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.auth.AuthHandler;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
-import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -12,7 +11,6 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 public class LibreLoginHandler implements AuthHandler {
@@ -21,6 +19,7 @@ public class LibreLoginHandler implements AuthHandler {
     private volatile boolean active;
     private final Logger logger = VelocityLimboHandler.getLogger();
     private final PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
+    private final long timeoutSeconds = VelocityLimboHandler.getConfig().getInt("auth-timeout-seconds", 120);
 
     public LibreLoginHandler(ProxyServer proxy, ReconnectBlocker blocker) {
         this.proxy = proxy;
@@ -47,19 +46,16 @@ public class LibreLoginHandler implements AuthHandler {
     public void onPlayerJoin(Player player) {
         if (!active) return;
 
-        System.out.println(player.getUsername());
-
         blocker.block(player.getUniqueId(), "auth");
 
         // Schedule kick after timeout (configurable)
-        long timeoutSeconds = VelocityLimboHandler.getConfig().getLong("auth-timeout-seconds", 120L);
 
         proxy.getScheduler().buildTask(VelocityLimboHandler.getInstance(), () -> {
             if (blocker.isBlocked(player.getUniqueId())) {
                 player.disconnect(MiniMessage.miniMessage().deserialize("<red>Authentication timed out. Please rejoin.</red>"));
                 blocker.unblock(player.getUniqueId()); // Clean up
             }
-        }).delay(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS).schedule();
+        }).delay(Duration.ofSeconds(timeoutSeconds)).schedule();
     }
 
     private void tryHook() {
@@ -105,8 +101,8 @@ public class LibreLoginHandler implements AuthHandler {
                 try {
                     Player p = extractPlayerFromLibreEvent(event);
                     if (p != null) {
+                        logger.info("Player " + p.getUsername() + " authenticated via LibreLogin — unblocked.");
                         blocker.unblock(p.getUniqueId());
-                        // logger.info("Player " + p.getUsername() + " authenticated via LibreLogin — unblocked.");
 
                         RegisteredServer server = playerManager.getPreviousServer(p);
                         playerManager.addPlayer(p, server);
