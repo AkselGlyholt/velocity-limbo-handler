@@ -72,5 +72,6 @@ public class ConnectionListener {
         Player player = event.getPlayer();
         VelocityLimboHandler.getPlayerManager().removePlayer(player);
         VelocityLimboHandler.getPlayerManager().removePlayerIssue(player);
+        VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
     }
 }

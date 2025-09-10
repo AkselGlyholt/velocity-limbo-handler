@@ -3,7 +3,7 @@ package com.akselglyholt.velocityLimboHandler.auth;
 import com.akselglyholt.velocityLimboHandler.auth.handlers.LibreLoginHandler;
 import com.akselglyholt.velocityLimboHandler.auth.handlers.NoopHandler;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
-import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
+import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 
@@ -23,7 +23,7 @@ public final class AuthManager implements AutoCloseable {
         handlers.add(new LibreLoginHandler(proxy, blocker));
         // add future handlers here
         selectActive();
-        proxy.getEventManager().register(plugin, PlayerChooseInitialServerEvent.class, evt -> {
+        proxy.getEventManager().register(plugin, PostLoginEvent.class, evt -> {
             Player p = evt.getPlayer();
             active.onPlayerJoin(p);
         });
