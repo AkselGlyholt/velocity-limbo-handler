@@ -15,7 +15,6 @@ public final class InMemoryReconnectBlocker implements ReconnectBlocker {
 
     @Override public void unblock(UUID id) {
         map.remove(id);
-        System.out.println(map);
     }
 
     @Override public boolean isBlocked(UUID id) {
