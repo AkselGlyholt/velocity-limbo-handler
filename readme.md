@@ -1,74 +1,92 @@
-# 🌐 VelocityLimboHandler | Fallback Server Handler for Velocity  
-Effortlessly manage player reconnections with a structured queue system!  
+# ⚡ VelocityLimboHandler
 
-[![Active Development](https://img.shields.io/badge/Maintenance%20Level-Actively%20Developed-brightgreen.svg)](https://gist.github.com/cheerfulstoic/d107229326a01ff0f333a1d3476e068d)
-[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-brightgreen)](https://github.com/AkselGlyholt/velocity-limbo-handler/blob/main/LICENSE)
-[![Download](https://img.shields.io/badge/Download-latest%20release-brightgreen)](https://github.com/AkselGlyholt/velocity-limbo-handler/releases/latest)  
-
-## About
-VelocityLimboHandler is a simple yet powerful **Velocity proxy plugin** that manages player fallback handling when a server becomes unavailable. Instead of leaving players stranded in Limbo, it systematically reconnects them to their last known server or a designated lobby.
-
-- **Queue-based Reconnection** – Ensures players are reconnected in an orderly manner.
-- **Customizable** – Configure the limbo and fallback settings to fit your needs.
-- **Supports Any Limbo Server** – Optimized for [LOOHP's Limbo](https://github.com/LOOHP/Limbo), but adaptable to others.
+🌀 A smart **limbo & queue handler** for [Velocity](https://velocitypowered.com)  
+Keeps your players connected, calm, and coming back even when backend servers crash.
 
 ---
 
-## Installation
-1. [Download the latest release](https://github.com/AkselGlyholt/velocity-limbo-handler/releases/latest).
-2. Place it in the `plugins` folder of your **Velocity proxy**.
-3. Restart the proxy to generate the configuration files.
-4. Configure the **proxy, Limbo server, and plugin** as needed.
-5. Restart the proxy once again.
+![GitHub release](https://img.shields.io/github/v/release/akselglyholt/velocity-limbo-handler?style=for-the-badge)
+![GitHub downloads](https://img.shields.io/github/downloads/akselglyholt/velocity-limbo-handler/total?style=for-the-badge\&color=blue)
+![License](https://img.shields.io/github/license/akselglyholt/velocity-limbo-handler?style=for-the-badge\&color=green)
+![Modrinth](https://img.shields.io/modrinth/dt/velocity-limbo-handler?style=for-the-badge\&logo=modrinth\&label=Modrinth%20Downloads)
 
 ---
 
-## Configuration
-After installation, configure the plugin via:
-`plugins/velocity-limbo-handler/config.yml`
+## ✨ Why VelocityLimboHandler?
 
-### **Required Settings:**
-* **`limbo-name`** (default: `Limbo`) – Name of the Limbo server in Velocity.  
-* **`direct-connect-server`** (default: `default`) – The server where direct connections should be sent.  
+* 🚦 **Per-Server Smart Queue** – players only wait for the server they were on, not behind others stuck elsewhere
+* 📢 **Queue Updates** – automatic position notifications keep players informed
+* 🔒 **Protected Limbo** – blocks unwanted commands to prevent bypasses
+* 🛠️ **Maintenance Support** – respects whitelist & bypass permissions
+* 🤝 **LibreLogin Ready** – seamless integration with authentication
 
-### **Optional Settings:**
-* **`task-interval`** (default: `3`) – Time (seconds) between connection attempts.  
-* **`queue-notify-interval`** (default: `30`) – How often players are notified of their queue position.  
-* **`disabled-commands`** (default: `["server", "lobby", "hub"]` – Commands that won't work inside the limbo server.
-
-* `messages.yml` is now editable for all in-plugin feedback texts
-* Maintenance integration is automatic if you're using a compatiable plugin. (Check Wiki)
-* Disable commands inside Limbo to prevent exploitation via `/server`
-
+👉 Full setup & advanced features in the [Wiki](../../wiki).
 
 ---
 
-## Setting Up the Proxy & Limbo  
-VelocityLimboHandler does not provide a built-in fallback system, so you'll need to configure your Velocity proxy to send players to Limbo when their target server is unavailable.
+## 🧩 Compatibility
 
-**Example Proxy Configuration (try orders):**
+* 🖥️ **Proxy:** Velocity (all recent versions)
+* 🎮 **MC Versions:** 1.8 → 1.21+
+* 📜 **License:** GPL-3.0
+
+---
+
+## 🚀 Quick Install
+
+1. Grab the latest `.jar` from [Releases](https://github.com/akselglyholt/velocity-limbo-handler/releases).
+2. Drop it into your Velocity `plugins` folder.
+3. Restart the proxy (config files will generate).
+4. Adjust `config.yml` + `messages.yml` to your liking.
+5. Restart once more — done! 🎉
+
+---
+
+## ⚙️ Config Highlights
+
+```yaml
+# config.yml
+limbo-name: "limbo"                  # The name of your limbo server
+direct-connect-server: "lobby"       # Where to send direct connections
+task-interval: 3                     # Queue processing interval (seconds)
+queue-notify-interval: 30            # How often to tell players their position
+disabled-commands: ["server","hub"]  # Commands blocked in limbo
+```
+
+👉 Messages can be tweaked in `messages.yml` so your players see exactly what you want.
+
+---
+
+## 🖧 Proxy Setup Example
+
 ```toml
 [servers]
-  try = ["default", "limbo"]
-```
+default = "lobby"
+limbo = "limbo"
 
-**Example Using Forced Hosts:**
-```toml
 [forced-hosts]
-  "build.example.com" = ["build", "limbo"]
-  "pvp.example.com" = ["pvp", "limbo"]
+"pvp.example.com" = ["pvp", "limbo"]
+"build.example.com" = ["build", "limbo"]
 ```
 
 ---
 
-## Todo
-* [ ] Priority Queue with permissions
-* [x] Per server queue
-* [x] Maintenance plugin integration
+## 🛡️ Permissions & Integrations
+
+* Players get queued automatically, no setup required.
+* Commands blocked per config.
+* LibreLogin support ensures login/auth flow isn’t broken.
+* Maintenance plugins are respected (bypass logic included).
 
 ---
 
-## License  
-This plugin is open-source under the **GPLv3 License**.
+## 🤝 Contributing
 
-Need help or have suggestions? Feel free to open an issue on GitHub! 🚀
+Pull requests are welcome! Just follow the style already in place.
+Check `CONTRIBUTING.md` for details.
+
+---
+
+## 📖 License
+
+Licensed under **GPL-3.0** — free to use, modify, and share under the same license.
