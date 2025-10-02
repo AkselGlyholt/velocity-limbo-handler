@@ -22,6 +22,8 @@ Keeps your players connected, calm, and coming back even when backend servers cr
 
 👉 Full setup & advanced features in the [Wiki](../../wiki).
 
+Made to work with (https://github.com/LOOHP/Limbo)[LOOHP's Limbo] server, but any other server is also fine.
+
 ---
 
 ## 🧩 Compatibility
