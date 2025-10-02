@@ -1,7 +1,6 @@
 package com.akselglyholt.velocityLimboHandler.storage;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
-import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.proxy.Player;
@@ -17,8 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class PlayerManager {
-    private final Map<Player, RegisteredServer> playerData;
-    private final Map<RegisteredServer, Queue<Player>> reconnectQueues = new ConcurrentHashMap<>();
+    private final Map<Player, String> playerData;
+    private final Map<String, Queue<Player>> reconnectQueues = new ConcurrentHashMap<>();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Map<UUID, String> playerConnectionIssues = new ConcurrentHashMap<>();
     private static String queuePositionMsg;
@@ -40,12 +39,13 @@ public class PlayerManager {
 
         if (isAuthBlocked(player)) return;
 
-        this.playerData.put(player, registeredServer);
+        String serverName = registeredServer.getServerInfo().getName();
+        this.playerData.put(player, serverName);
 
         Utility.sendWelcomeMessage(player, null);
 
         // Only maintain a reconnect queue when queue mode is enabled
-        Queue<Player> queue = reconnectQueues.computeIfAbsent(registeredServer, s -> new ConcurrentLinkedQueue<>());
+        Queue<Player> queue = reconnectQueues.computeIfAbsent(serverName, s -> new ConcurrentLinkedQueue<>());
         if (VelocityLimboHandler.isQueueEnabled() && !queue.contains(player)) {
             addPlayerToQueue(player, registeredServer);
 
@@ -62,7 +62,15 @@ public class PlayerManager {
     }
 
     public RegisteredServer getPreviousServer(Player player) {
-        return this.playerData.getOrDefault(player, VelocityLimboHandler.getDirectConnectServer());
+        String serverName = this.playerData.get(player);
+
+        if (serverName != null) {
+            return VelocityLimboHandler.getProxyServer()
+                    .getServer(serverName)
+                    .orElse(VelocityLimboHandler.getDirectConnectServer());
+        }
+
+        return VelocityLimboHandler.getDirectConnectServer();
     }
 
     public boolean isPlayerRegistered(Player player) {
@@ -70,30 +78,35 @@ public class PlayerManager {
     }
 
     public void addPlayerToQueue(Player player, RegisteredServer server) {
-        reconnectQueues.computeIfAbsent(server, s -> new ConcurrentLinkedQueue<>()).add(player);
+        reconnectQueues.computeIfAbsent(server.getServerInfo().getName(), s -> new ConcurrentLinkedQueue<>()).add(player);
     }
 
     public void removePlayerFromQueue(Player player) {
-        RegisteredServer server = this.playerData.getOrDefault(player, VelocityLimboHandler.getDirectConnectServer());
+        String serverName = this.playerData.get(player);
+        if (serverName == null && VelocityLimboHandler.getDirectConnectServer() != null) {
+            serverName = VelocityLimboHandler.getDirectConnectServer().getServerInfo().getName();
+        }
 
-        Queue<Player> queue = reconnectQueues.get(server);
+        if (serverName == null) return;
+
+        Queue<Player> queue = reconnectQueues.get(serverName);
         if (queue != null) queue.remove(player);
     }
 
     public Player getNextQueuedPlayer(RegisteredServer server) {
-        Queue<Player> queue = reconnectQueues.get(server);
+        Queue<Player> queue = reconnectQueues.get(server.getServerInfo().getName());
         return queue == null ? null : queue.peek();
     }
 
     public boolean hasQueuedPlayers(RegisteredServer server) {
-        Queue<Player> queue = reconnectQueues.get(server);
+        Queue<Player> queue = reconnectQueues.get(server.getServerInfo().getName());
         return queue != null && !queue.isEmpty();
     }
 
     public int getQueuePosition(Player player) {
         RegisteredServer server = getPreviousServer(player);
 
-        Queue<Player> queue = reconnectQueues.get(server);
+        Queue<Player> queue = reconnectQueues.get(server.getServerInfo().getName());
         if (queue == null) return -1;
 
         int position = 1;
@@ -135,7 +148,7 @@ public class PlayerManager {
      */
     public static Player findFirstMaintenanceAllowedPlayer(RegisteredServer server) {
         // Find the queue for the server
-        Queue<Player> queue = VelocityLimboHandler.getPlayerManager().reconnectQueues.get(server);
+        Queue<Player> queue = VelocityLimboHandler.getPlayerManager().reconnectQueues.get(server.getServerInfo().getName());
         if (queue == null) return null;
 
         // Loop through all players and check if any match is found
