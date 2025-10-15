@@ -9,6 +9,7 @@ direct-connect-server: lobby # Default "lobby"
 
 # How often the server should check if it can connect
 task-interval: 3 # The time in seconds (Default: 3)
+player-per-s: 2 # How many players should be connected per second (Default: 2)
 
 # How often should the user be notified of their position in the queue
 queue-enabled: true # Should players be reconnected through a queue (Default: true)

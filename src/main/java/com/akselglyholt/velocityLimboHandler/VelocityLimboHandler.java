@@ -36,6 +36,7 @@ import org.bstats.velocity.Metrics;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -224,6 +225,9 @@ public class VelocityLimboHandler {
             commandBlocker.blockCommand(cmd, CommandBlockRule.onServer(limboName));
         }
 
+        int playerPerS = config.getInt(Route.from("player-per-s"), 2);
+        int playersToConnect = playerPerS * reconnectInterval;
+
         // Schedule the reconnection task
         proxyServer.getScheduler().buildTask(this, () -> {
             // Prevent unnecessary processing when no players are connected
@@ -233,49 +237,71 @@ public class VelocityLimboHandler {
             // Prune all in-active members
             playerManager.pruneInactivePlayers();
 
-            // Loop through all servers, if queue is enabled
             if (queueEnabled) {
-                for (RegisteredServer server : proxyServer.getAllServers()) {
-                    // Queue mode – get the next player from the queue
-                    if (!playerManager.hasQueuedPlayers(server)) continue;
+                List<RegisteredServer> servers = new ArrayList<>(proxyServer.getAllServers());
+                int serverIndex = 0;
+                int connectedCount = 0;
+                int serversChecked = 0;
 
-                    // Check if the server is in Maintenance mode
-                    if (Utility.isServerInMaintenance(server.getServerInfo().getName())) {
-                        // Is in Maintenance mode, so find first player in queue that can join
-                        Player whitelistedPlayer = PlayerManager.findFirstMaintenanceAllowedPlayer(server);
+                while (connectedCount < playersToConnect && !servers.isEmpty() && serversChecked < servers.size()) {
+                    RegisteredServer server = servers.get(serverIndex);
 
-                        if (whitelistedPlayer != null && whitelistedPlayer.isActive()) {
-                            reconnectPlayer(whitelistedPlayer);
+                    if (playerManager.hasQueuedPlayers(server)) {
+                        Player nextPlayer;
+                        if (Utility.isServerInMaintenance(server.getServerInfo().getName())) {
+                            nextPlayer = PlayerManager.findFirstMaintenanceAllowedPlayer(server);
+                        } else {
+                            nextPlayer = playerManager.getNextQueuedPlayer(server);
+                        }
+
+                        if (nextPlayer != null && nextPlayer.isActive()) {
+                            reconnectPlayer(nextPlayer);
+                            connectedCount++;
+                            serversChecked = 0;
+                        } else {
+                            serversChecked++;
                         }
                     } else {
-                        // Is not in Maintenance mode, so carry on with normal queue.
-                        Player nextPlayer = playerManager.getNextQueuedPlayer(server);
-                        reconnectPlayer(nextPlayer);
+                        serversChecked++;
                     }
+
+                    serverIndex = (serverIndex + 1) % servers.size();
+
+                    boolean allEmpty = true;
+                    for (RegisteredServer s : servers) {
+                        if (playerManager.hasQueuedPlayers(s)) {
+                            allEmpty = false;
+                            break;
+                        }
+                    }
+                    if (allEmpty) break;
                 }
             } else {
-                for (Player player : connectedPlayers) {
+                int connectedCount = 0;
+                for (Player player : new ArrayList<>(connectedPlayers)) {
+                    if (connectedCount >= playersToConnect) break;
+
                     if (!playerManager.hasConnectionIssue(player) && player.isActive()) {
-                        // Check if the server is in maintenance mode
+                        if (authManager.isAuthBlocked(player)) {
+                            continue;
+                        }
+
                         RegisteredServer previousServer = playerManager.getPreviousServer(player);
 
                         if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
-                            // Check if the player has whitelist or another bypass to join, or continue to next player
-                            if (player.hasPermission("maintenance.admin")
+                            boolean hasBypass = player.hasPermission("maintenance.admin")
                                     || player.hasPermission("maintenance.bypass")
                                     || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())
-                                    || Utility.playerMaintenanceWhitelisted(player)
-                                    || authManager.isAuthBlocked(player)) {
-                                // Can't join server whilst in Maintenance, or player is Auth Blocked so continue to next
+                                    || Utility.playerMaintenanceWhitelisted(player);
+                            if (!hasBypass) {
                                 continue;
                             }
                         }
 
                         reconnectPlayer(player);
-                        break;
+                        connectedCount++;
                     }
                 }
-
             }
         }).repeat(reconnectInterval, TimeUnit.SECONDS).schedule();
 
