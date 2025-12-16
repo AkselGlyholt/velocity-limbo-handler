@@ -6,7 +6,7 @@
 
     <groupId>com.akselglyholt</groupId>
     <artifactId>velocity-limbo-handler</artifactId>
-    <version>1.6.2</version>
+    <version>1.6.3-snapshot</version>
     <packaging>jar</packaging>
 
     <name>velocity-limbo-handler</name>

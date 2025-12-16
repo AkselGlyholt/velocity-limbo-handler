@@ -14,7 +14,7 @@ import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.logging.Logger;
 
-public class LibreLoginHandler implements AuthHandler {
+public class LibreLoginNextHandler implements AuthHandler {
     private final ProxyServer proxy;
     private final ReconnectBlocker blocker;
     private volatile boolean active;
@@ -22,19 +22,19 @@ public class LibreLoginHandler implements AuthHandler {
     private final PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
     private final long timeoutSeconds = VelocityLimboHandler.getConfig().getInt("auth-timeout-seconds", 120);
 
-    public LibreLoginHandler(ProxyServer proxy, ReconnectBlocker blocker) {
+    public LibreLoginNextHandler(ProxyServer proxy, ReconnectBlocker blocker) {
         this.proxy = proxy;
         this.blocker = blocker;
 
         // Detection by plugin id or class existence
-        this.active = proxy.getPluginManager().getPlugin("librelogin").isPresent()
-                || classPresent("xyz.kyngs.librelogin.api.LibreLoginPlugin");
+        this.active = proxy.getPluginManager().getPlugin("libreloginnext").isPresent();
+
         if (active) tryHook();
     }
 
     @Override
     public String name() {
-        return "LibreLogin";
+        return "LibreLoginNext";
     }
 
     @Override
@@ -63,19 +63,19 @@ public class LibreLoginHandler implements AuthHandler {
 
     private void tryHook() {
         try {
-            logger.info("LibreLogin plugin detected! Integrating now");
+            logger.info("LibreLoginNext plugin detected! Integrating now");
 
             // 1) Get bootstrap (VelocityBootstrap) instance
-            var containerOpt = proxy.getPluginManager().getPlugin("librelogin");
+            var containerOpt = proxy.getPluginManager().getPlugin("libreloginnext");
             var instanceOpt = containerOpt.flatMap(com.velocitypowered.api.plugin.PluginContainer::getInstance);
             if (instanceOpt.isEmpty()) {
-                logger.warning("LibreLogin plugin instance not available.");
+                logger.warning("LibreLoginNext plugin instance not available.");
                 return;
             }
             Object bootstrap = instanceOpt.get();
 
             // 2) bootstrap.getLibreLogin() -> core plugin
-            Method getLibreLogin = bootstrap.getClass().getMethod("getLibreLogin");
+            Method getLibreLogin = bootstrap.getClass().getMethod("getLibreLoginNext");
             Object core = getLibreLogin.invoke(bootstrap);
 
             // 3) core.getEventProvider()
@@ -99,14 +99,14 @@ public class LibreLoginHandler implements AuthHandler {
             Object authType = authField.get(types);
 
             // 5) Subscribe: subscribe(EventType<T>, Consumer<T>)
-            Class<?> eventTypeClass = Class.forName("xyz.kyngs.librelogin.api.event.EventType");
+            Class<?> eventTypeClass = Class.forName("xyz.miguvt.libreloginnext.api.event.EventType");
             Method subscribe = eventProvider.getClass().getMethod("subscribe", eventTypeClass, java.util.function.Consumer.class);
 
             java.util.function.Consumer<Object> handler = (Object event) -> {
                 try {
                     Player p = extractPlayerFromLibreEvent(event);
                     if (p != null) {
-                        logger.info("Player " + p.getUsername() + " authenticated via LibreLogin — unblocked.");
+                        logger.info("Player " + p.getUsername() + " authenticated via LibreLoginLogin — unblocked.");
                         blocker.unblock(p.getUniqueId());
 
                         RegisteredServer server = playerManager.getPreviousServer(p);
@@ -133,13 +133,13 @@ public class LibreLoginHandler implements AuthHandler {
 
             subscribe.invoke(eventProvider, authType, handler);
 
-            logger.info("Subscribed to LibreLogin 'authenticated' event.");
+            logger.info("Subscribed to LibreLoginLogin 'authenticated' event.");
         } catch (Exception e) {
-            logger.warning("Failed to integrate with LibreLogin: " + e.getMessage());
+            logger.warning("Failed to integrate with LibreLoginLogin: " + e.getMessage());
         }
     }
 
-    private static java.lang.reflect.Method safeMethod(Class<?> c, String name, Class<?>... params) {
+    private static Method safeMethod(Class<?> c, String name, Class<?>... params) {
         try {
             return c.getMethod(name, params);
         } catch (NoSuchMethodException e) {
@@ -185,7 +185,7 @@ public class LibreLoginHandler implements AuthHandler {
 
     private static boolean classPresent(String fqn) {
         try {
-            Class.forName(fqn, false, LibreLoginHandler.class.getClassLoader());
+            Class.forName(fqn, false, LibreLoginNextHandler.class.getClassLoader());
             return true;
         } catch (Throwable t) {
             return false;
