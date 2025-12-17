@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.auth;
 
 import com.akselglyholt.velocityLimboHandler.auth.handlers.LibreLoginHandler;
+import com.akselglyholt.velocityLimboHandler.auth.handlers.LibreLoginNextHandler;
 import com.akselglyholt.velocityLimboHandler.auth.handlers.NoopHandler;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
@@ -21,6 +22,7 @@ public final class AuthManager implements AutoCloseable {
         this.blocker = blocker;
         // order matters if multiple are present
         handlers.add(new LibreLoginHandler(proxy, blocker));
+        handlers.add(new LibreLoginNextHandler(proxy, blocker));
         // add future handlers here
         selectActive();
         proxy.getEventManager().register(plugin, PostLoginEvent.class, evt -> {
