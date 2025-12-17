@@ -22,16 +22,18 @@ public class ConnectionListener {
         RegisteredServer intendedServer = event.getOriginalServer();
         RegisteredServer limbo = VelocityLimboHandler.getLimboServer();
 
-
-        // 1. Safety check: Don't reroute if the player is ALREADY trying to join Limbo
+        // Don't reroute if they are already going to Limbo
         if (Utility.doServerNamesMatch(intendedServer, limbo)) {
             return;
         }
 
-        // 2. Check if the server has queued players
-        if (VelocityLimboHandler.getPlayerManager().hasQueuedPlayers(intendedServer)) {
+        // If the plugin is the one moving the player, let them pass!
+        if (VelocityLimboHandler.getPlayerManager().isPlayerConnecting(player)) {
+            return;
+        }
 
-            // 3. SET THE RESULT to tell Velocity where to actually send them
+        // Check if the server has a queue (for incidental joins)
+        if (VelocityLimboHandler.getPlayerManager().hasQueuedPlayers(intendedServer)) {
             event.setResult(ServerPreConnectEvent.ServerResult.allowed(limbo));
 
             VelocityLimboHandler.getLogger().info(String.format("Rerouting %s to Limbo (Server %s is queued)",
