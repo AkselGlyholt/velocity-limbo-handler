@@ -17,6 +17,7 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
+import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -277,7 +278,7 @@ public class VelocityLimboHandler {
                 }
 
             }
-        }).repeat(reconnectInterval, TimeUnit.SECONDS).schedule();
+        }).repeat(reconnectInterval, TimeUnit.MILLISECONDS).schedule();
 
         // Schedule queue position notifier
         proxyServer.getScheduler().buildTask(this, () -> {
@@ -352,14 +353,22 @@ public class VelocityLimboHandler {
                 }
             }
 
+            if (playerManager.isPlayerConnecting(player)) return;
+
+            playerManager.setPlayerConnecting(player, true);
+
             Utility.logInformational(String.format("Connecting %s to %s", player.getUsername(), previousServer.getServerInfo().getName()));
 
             player.createConnectionRequest(previousServer).connect().whenComplete(((result, throwable) -> {
+                playerManager.setPlayerConnecting(player, false);
+
                 if (result.isSuccessful()) {
                     Utility.logInformational(String.format("Successfully reconnected %s to %s", player.getUsername(), previousServer.getServerInfo().getName()));
                     playerManager.removePlayerIssue(player);
                     return;
                 }
+
+                if (result.getStatus() == ConnectionRequestBuilder.Status.CONNECTION_IN_PROGRESS) return;
 
                 Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s",
                         player.getUsername(),

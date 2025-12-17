@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class PlayerManager {
     private final Map<Player, String> playerData;
+    private final Map<Player, Boolean> connectingPlayers;
     private final Map<String, Queue<Player>> reconnectQueues = new ConcurrentHashMap<>();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Map<UUID, String> playerConnectionIssues = new ConcurrentHashMap<>();
@@ -29,6 +30,7 @@ public class PlayerManager {
 
     public PlayerManager() {
         this.playerData = new LinkedHashMap<>();
+        this.connectingPlayers = new LinkedHashMap<>();
 
         queuePositionMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("queuePositionJoin"));
     }
@@ -58,6 +60,7 @@ public class PlayerManager {
     public void removePlayer(Player player) {
         removePlayerFromQueue(player);
         this.playerData.remove(player);
+        this.connectingPlayers.remove(player);
         VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
     }
 
@@ -162,5 +165,22 @@ public class PlayerManager {
         }
 
         return null;
+    }
+
+    // Check if player is in the hashmap
+    public boolean isPlayerConnecting(Player player) {
+        return this.connectingPlayers.containsKey(player);
+    }
+
+    /**
+     * @param player is the player of which you want to set the status of
+     * @param add    is whether you want to add the player, or remove it
+     */
+    public void setPlayerConnecting(Player player, Boolean add) {
+        if (add) {
+            this.connectingPlayers.put(player, true);
+        } else {
+            this.connectingPlayers.remove(player);
+        }
     }
 }

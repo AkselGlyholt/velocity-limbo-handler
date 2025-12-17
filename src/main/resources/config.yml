@@ -1,4 +1,4 @@
-file-version: 4
+file-version: 5
 
 # Server configs - These are settings you need to change!
 # The name of the limbo server in your velocity network
@@ -8,7 +8,7 @@ limbo-name: limbo # Default "limbo"
 direct-connect-server: lobby # Default "lobby"
 
 # How often the server should check if it can connect
-task-interval: 3 # The time in seconds (Default: 3)
+task-interval: 3000 # The time in milliseconds (Default: 3000)
 
 # How often should the user be notified of their position in the queue
 queue-enabled: true # Should players be reconnected through a queue (Default: true)
