@@ -133,7 +133,7 @@ public class LibreLoginNextHandler implements AuthHandler {
 
             subscribe.invoke(eventProvider, authType, handler);
 
-            logger.info("Subscribed to LibreLoginNexr 'authenticated' event.");
+            logger.info("Subscribed to LibreLoginNext 'authenticated' event.");
         } catch (Exception e) {
             logger.warning("Failed to integrate with LibreLoginNext: " + e.getMessage());
         }
