@@ -5,6 +5,7 @@ import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.ServerPostConnectEvent;
+import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -14,6 +15,29 @@ import java.net.InetSocketAddress;
 import java.util.List;
 
 public class ConnectionListener {
+
+    @Subscribe
+    public void onPlayerPreConnect(@NotNull ServerPreConnectEvent event) {
+        Player player = event.getPlayer();
+        RegisteredServer intendedServer = event.getOriginalServer();
+        RegisteredServer limbo = VelocityLimboHandler.getLimboServer();
+
+
+        // 1. Safety check: Don't reroute if the player is ALREADY trying to join Limbo
+        if (Utility.doServerNamesMatch(intendedServer, limbo)) {
+            return;
+        }
+
+        // 2. Check if the server has queued players
+        if (VelocityLimboHandler.getPlayerManager().hasQueuedPlayers(intendedServer)) {
+
+            // 3. SET THE RESULT to tell Velocity where to actually send them
+            event.setResult(ServerPreConnectEvent.ServerResult.allowed(limbo));
+
+            VelocityLimboHandler.getLogger().info(String.format("Rerouting %s to Limbo (Server %s is queued)",
+                    player.getUsername(), intendedServer.getServerInfo().getName()));
+        }
+    }
 
     @Subscribe
     public void onPlayerPostConnect(@NotNull ServerPostConnectEvent event) {
