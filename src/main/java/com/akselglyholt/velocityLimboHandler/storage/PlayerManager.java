@@ -8,7 +8,6 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import dev.dejvokep.boostedyaml.route.Route;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
@@ -29,8 +28,8 @@ public class PlayerManager {
     }
 
     public PlayerManager() {
-        this.playerData = new LinkedHashMap<>();
-        this.connectingPlayers = new LinkedHashMap<>();
+        this.playerData = new ConcurrentHashMap<>();
+        this.connectingPlayers = new ConcurrentHashMap<>();
 
         queuePositionMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("queuePositionJoin"));
     }

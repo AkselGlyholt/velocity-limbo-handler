@@ -326,18 +326,14 @@ public class VelocityLimboHandler {
 
     private static void reconnectPlayer(Player player) {
         if (player == null || !player.isActive()) return;
-
         if (authManager.isAuthBlocked(player)) return;
 
         RegisteredServer previousServer = playerManager.getPreviousServer(player);
 
-        // If enabled, check if a server responds to pings before connecting
-        try {
-            try {
-                previousServer.ping().join(); // Check if the server is online
-            } catch (CompletionException completionException) {
-                // Server failed to respond to ping request, return to prevent spam
-                return;
+        // If enabled, check if a server responds to pings before connecting, asynchronously
+        previousServer.ping().whenComplete((ping, throwable) -> {
+            if (throwable != null || ping == null) {
+                return; // Server offline
             }
 
             // Check if maintenance mode is enabled on Backend Server
@@ -359,7 +355,7 @@ public class VelocityLimboHandler {
 
             Utility.logInformational(String.format("Connecting %s to %s", player.getUsername(), previousServer.getServerInfo().getName()));
 
-            player.createConnectionRequest(previousServer).connect().whenComplete(((result, throwable) -> {
+            player.createConnectionRequest(previousServer).connect().whenComplete(((result, connectionThrowable) -> {
                 playerManager.setPlayerConnecting(player, false);
 
                 if (result.isSuccessful()) {
@@ -375,9 +371,9 @@ public class VelocityLimboHandler {
                         previousServer.getServerInfo().getName(),
                         result.getStatus()));
 
-                if (throwable != null) {
+                if (connectionThrowable != null) {
                     // Get the error message from throwable
-                    String errorMessage = throwable.getMessage();
+                    String errorMessage = connectionThrowable.getMessage();
                     if (errorMessage == null) errorMessage = "";
 
                     // Also check the result component if available
@@ -409,9 +405,7 @@ public class VelocityLimboHandler {
                     }
                 }
             }));
-        } catch (CompletionException exception) {
-            // Prevent console from being spammed when a server is offline and ping-check is disabled
-        }
+        });
     }
 
     private static boolean playerConnectIssue(Player player, String reason) {
