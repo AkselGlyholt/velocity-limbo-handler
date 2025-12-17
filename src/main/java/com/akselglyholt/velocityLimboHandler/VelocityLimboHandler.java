@@ -21,6 +21,7 @@ import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.velocitypowered.api.proxy.server.ServerPing;
 import dev.dejvokep.boostedyaml.YamlDocument;
 import dev.dejvokep.boostedyaml.dvs.versioning.BasicVersioning;
 import dev.dejvokep.boostedyaml.route.Route;
@@ -335,6 +336,15 @@ public class VelocityLimboHandler {
             if (throwable != null || ping == null) {
                 return; // Server offline
             }
+
+            // Check if the server is full
+            if (ping.getPlayers().isEmpty()) return;
+
+            ServerPing.Players serverPlayers = ping.getPlayers().get();
+            int maxPlayers = serverPlayers.getMax();
+            int onlinePlayers = serverPlayers.getOnline();
+
+            if (maxPlayers <= onlinePlayers) return;
 
             // Check if maintenance mode is enabled on Backend Server
             if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
