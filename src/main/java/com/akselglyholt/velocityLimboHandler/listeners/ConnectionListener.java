@@ -5,6 +5,7 @@ import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.ServerPostConnectEvent;
+import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -14,6 +15,31 @@ import java.net.InetSocketAddress;
 import java.util.List;
 
 public class ConnectionListener {
+
+    @Subscribe
+    public void onPlayerPreConnect(@NotNull ServerPreConnectEvent event) {
+        Player player = event.getPlayer();
+        RegisteredServer intendedServer = event.getOriginalServer();
+        RegisteredServer limbo = VelocityLimboHandler.getLimboServer();
+
+        // Don't reroute if they are already going to Limbo
+        if (Utility.doServerNamesMatch(intendedServer, limbo)) {
+            return;
+        }
+
+        // If the plugin is the one moving the player, let them pass!
+        if (VelocityLimboHandler.getPlayerManager().isPlayerConnecting(player)) {
+            return;
+        }
+
+        // Check if the server has a queue (for incidental joins)
+        if (VelocityLimboHandler.getPlayerManager().hasQueuedPlayers(intendedServer)) {
+            event.setResult(ServerPreConnectEvent.ServerResult.allowed(limbo));
+
+            VelocityLimboHandler.getLogger().info(String.format("Rerouting %s to Limbo (Server %s is queued)",
+                    player.getUsername(), intendedServer.getServerInfo().getName()));
+        }
+    }
 
     @Subscribe
     public void onPlayerPostConnect(@NotNull ServerPostConnectEvent event) {
