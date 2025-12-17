@@ -106,7 +106,7 @@ public class LibreLoginNextHandler implements AuthHandler {
                 try {
                     Player p = extractPlayerFromLibreEvent(event);
                     if (p != null) {
-                        logger.info("Player " + p.getUsername() + " authenticated via LibreLoginLogin — unblocked.");
+                        logger.info("Player " + p.getUsername() + " authenticated via LibreLoginNext — unblocked.");
                         blocker.unblock(p.getUniqueId());
 
                         RegisteredServer server = playerManager.getPreviousServer(p);
@@ -127,15 +127,15 @@ public class LibreLoginNextHandler implements AuthHandler {
                         }
                     }
                 } catch (Exception ex) {
-                    logger.warning("Failed to process LibreLogin auth event: " + ex.getMessage());
+                    logger.warning("Failed to process LibreLoginNext auth event: " + ex.getMessage());
                 }
             };
 
             subscribe.invoke(eventProvider, authType, handler);
 
-            logger.info("Subscribed to LibreLoginLogin 'authenticated' event.");
+            logger.info("Subscribed to LibreLoginNexr 'authenticated' event.");
         } catch (Exception e) {
-            logger.warning("Failed to integrate with LibreLoginLogin: " + e.getMessage());
+            logger.warning("Failed to integrate with LibreLoginNext: " + e.getMessage());
         }
     }
 
