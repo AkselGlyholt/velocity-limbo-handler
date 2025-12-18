@@ -20,7 +20,6 @@ public class LibreLoginHandler implements AuthHandler {
     private volatile boolean active;
     private final Logger logger = VelocityLimboHandler.getLogger();
     private final PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
-    private final long timeoutSeconds = VelocityLimboHandler.getConfig().getInt("auth-timeout-seconds", 120);
 
     public LibreLoginHandler(ProxyServer proxy, ReconnectBlocker blocker) {
         this.proxy = proxy;
@@ -47,18 +46,6 @@ public class LibreLoginHandler implements AuthHandler {
         if (!active) return;
 
         blocker.block(player.getUniqueId(), "auth");
-
-        // Schedule kick after timeout (configurable)
-
-        if (timeoutSeconds <= 0) return;
-
-        proxy.getScheduler().buildTask(VelocityLimboHandler.getInstance(), () -> {
-            if (blocker.isBlocked(player.getUniqueId())) {
-                player.disconnect(MiniMessage.miniMessage().deserialize(VelocityLimboHandler.getMessageConfig().getString(Route.from("authTimeout"))));
-                player.disconnect(MiniMessage.miniMessage().deserialize("<red>Authentication timed out. Please rejoin.</red>"));
-                blocker.unblock(player.getUniqueId()); // Clean up
-            }
-        }).delay(Duration.ofSeconds(timeoutSeconds)).schedule();
     }
 
     private void tryHook() {
