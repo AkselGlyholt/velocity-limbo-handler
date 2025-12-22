@@ -283,6 +283,7 @@ public class VelocityLimboHandler {
 
         // Schedule queue position notifier
         proxyServer.getScheduler().buildTask(this, () -> {
+            if (!config.getBoolean(Route.from("enable-sending-back"))) return;
             for (Player player : limboServer.getPlayersConnected()) {
                 // Always show connection issue messages regardless of queue status
                 if (playerManager.hasConnectionIssue(player)) {
@@ -326,6 +327,8 @@ public class VelocityLimboHandler {
     }
 
     private static void reconnectPlayer(Player player) {
+        if (!config.getBoolean(Route.from("enable-sending-back"))) return;
+
         if (player == null || !player.isActive()) return;
         if (authManager.isAuthBlocked(player)) return;
 

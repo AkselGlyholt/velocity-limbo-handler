@@ -4,6 +4,9 @@ file-version: 5
 # The name of the limbo server in your velocity network
 limbo-name: limbo # Default "limbo"
 
+# Should players be sent back to the server they last connected to automatically?
+enable-sending-back: true
+
 # Direct-connect-server is the name of the server you want players to connect to if they connected directly to the server in the velocity network
 direct-connect-server: lobby # Default "lobby"
 
@@ -17,5 +20,5 @@ queue-notify-interval: 30 # The time in seconds (Default: 30)
 # A list of disabled commands, which will not work inside the Limbo server. Recommended commands are ones that the player can use to transfer server, like /server or /hub
 disabled-commands: ["server", "lobby", "hub"]
 
-# The time a player has to authenticate, if an Authentication plugin is installed, in seconds
+# The time a player has to authenticate if an Authentication plugin is installed, in seconds
 auth-timeout-seconds: 120 # Default 120
