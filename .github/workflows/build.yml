@@ -25,8 +25,7 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: 21
+          distribution: 'temurin'          java-version: 21
 
       - name: Cache Maven dependencies
         uses: actions/cache@v4
@@ -57,10 +56,9 @@ jobs:
         with:
           token: ${{ secrets.MODRINTH_TOKEN }}
           project: velocity-limbo-handler
-          name: Alpha Build ${{ github.sha.substring(0,7) }}
+          name: Alpha Build ${{ github.sha }}
           version: alpha.${{ github.run_number }}
-          changelog: "Automated alpha build from commit ${{ github.sha }}"
-          loaders: |
+          changelog: "Automated alpha build from commit ${{ github.sha }}"          loaders: |
             velocity
           game-versions: |
             1.8.x
