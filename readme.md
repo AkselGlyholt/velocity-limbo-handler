@@ -50,7 +50,7 @@ Made to work with [LOOHP's Limbo](https://github.com/LOOHP/Limbo) server, but an
 # config.yml
 limbo-name: "limbo"                  # The name of your limbo server
 direct-connect-server: "lobby"       # Where to send direct connections
-task-interval: 3                     # Queue processing interval (seconds)
+task-interval: 3000                  # Queue processing interval (milliseconds)
 queue-notify-interval: 30            # How often to tell players their position
 disabled-commands: ["server","hub"]  # Commands blocked in limbo
 ```
