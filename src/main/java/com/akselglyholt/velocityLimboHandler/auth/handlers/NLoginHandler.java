@@ -83,6 +83,11 @@ public class NLoginHandler implements AuthHandler {
 
         if (limbo == null) return;
 
+        // Return if the server the player is connecting from isn't the Limbo
+        if (player.getCurrentServer().isPresent() && !player.getCurrentServer().get().getServer().equals(limbo)) {
+            return;
+        }
+
         // Let plugin-initiated connections pass through
         if (VelocityLimboHandler.getPlayerManager().isPlayerConnecting(player)) {
             return;
