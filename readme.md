@@ -18,7 +18,7 @@ Keeps your players connected, calm, and coming back even when backend servers cr
 * 📢 **Queue Updates** – automatic position notifications keep players informed
 * 🔒 **Protected Limbo** – blocks unwanted commands to prevent bypasses
 * 🛠️ **Maintenance Support** – respects whitelist & bypass permissions
-* 🤝 **LibreLogin Ready** – seamless integration with authentication
+* 🤝 **Authentication Ready** – seamless integration with authentication plugins such as LibreLogin or nLogin
 
 👉 Full setup & advanced features in the [Wiki](../../wiki).
 
