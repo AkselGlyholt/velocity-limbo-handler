@@ -57,7 +57,7 @@ jobs:
         with:
           token: ${{ secrets.MODRINTH_TOKEN }}
           project: velocity-limbo-handler
-          name: Alpha Build ${{ github.sha.substring(0,7) }}
+          name: Alpha Build ${{ github.sha }}
           version: alpha-${{ github.run_number }}
           changelog: "Automated alpha build from commit ${{ github.sha.substring(0,7) }}"
           loaders: |
