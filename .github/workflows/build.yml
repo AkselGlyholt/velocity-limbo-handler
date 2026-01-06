@@ -56,9 +56,9 @@ jobs:
         uses: cloudnode-pro/modrinth-publish@v2
         with:
           token: ${{ secrets.MODRINTH_TOKEN }}
-          project: velocity-limbo-handler
+          project: xPIxOI5h
           name: Alpha Build ${{ github.sha }}
-          version: alpha${{ github.run_number }}
+          version: v${{ github.run_number }}-alpha
           changelog: "Automated alpha build from commit ${{ github.sha }}"
           loaders: |
             velocity
