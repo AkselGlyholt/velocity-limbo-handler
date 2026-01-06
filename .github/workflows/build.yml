@@ -44,22 +44,22 @@ jobs:
           jar=$(find target -maxdepth 1 -type f -name "*.jar" ! -name "original-*.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar")
           base=$(basename "$jar" .jar)
           if [ "${{ github.event_name }}" == "push" ]; then
-            new_name="${base}+alpha.${{ github.run_number }}.jar"
+            new_name="${base}-alpha.${{ github.run_number }}.jar"
           else
-            new_name="${base}+${{ github.run_number }}.jar"
+            new_name="${base}-${{ github.run_number }}.jar"
           fi
           mv "$jar" "target/$new_name"
           echo "RENAMED_JAR=$new_name" >> $GITHUB_ENV
-
+      
       - name: Upload to Modrinth (only on push to main)
         if: github.event_name == 'push'
         uses: cloudnode-pro/modrinth-publish@v2
         with:
           token: ${{ secrets.MODRINTH_TOKEN }}
           project: velocity-limbo-handler
-          name: Alpha Build ${{ github.sha }}
-          version: alpha.${{ github.run_number }}
-          changelog: "Automated alpha build from commit ${{ github.sha }}"          
+          name: Alpha Build ${{ github.sha.substring(0,7) }}
+          version: alpha-${{ github.run_number }}
+          changelog: "Automated alpha build from commit ${{ github.sha.substring(0,7) }}"
           loaders: |
             velocity
           game-versions: |
