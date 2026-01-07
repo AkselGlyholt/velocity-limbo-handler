@@ -43,7 +43,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -51,7 +50,7 @@ import java.util.logging.Logger;
 public class VelocityLimboHandler {
     private static VelocityLimboHandler instance;
     private static ProxyServer proxyServer;
-    private static Logger logger = Logger.getLogger("Limbo Handler");
+    private static final Logger logger = Logger.getLogger("Limbo Handler");
     private static RegisteredServer limboServer;
     private static RegisteredServer directConnectServer;
 
@@ -70,7 +69,6 @@ public class VelocityLimboHandler {
     private static Object maintenanceAPI = null;
 
     private final Metrics.Factory metricsFactory;
-    private Metrics metrics;
 
     // Message caching
     private static String bannedMsg;
@@ -82,7 +80,6 @@ public class VelocityLimboHandler {
     public VelocityLimboHandler(ProxyServer server, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
         proxyServer = server;
         instance = this;
-        //logger = loggerInstance;
 
         try {
             config = YamlDocument.create(new File(dataDirectory.toFile(), "config.yml"), Objects.requireNonNull(getClass().getResourceAsStream("/config.yml")), GeneralSettings.DEFAULT, LoaderSettings.builder().setAutoUpdate(true).build(), DumperSettings.DEFAULT, UpdaterSettings.builder().setVersioning(new BasicVersioning("file-version")).setOptionSorting(UpdaterSettings.OptionSorting.SORT_BY_DEFAULTS).build());
@@ -117,12 +114,12 @@ public class VelocityLimboHandler {
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
         int pluginId = 26682;
-        metrics = metricsFactory.make(this, pluginId);
+        Metrics metrics = metricsFactory.make(this, pluginId);
 
         // Metric for players inside the limbo
         metrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
             @Override
-            public Integer call() throws Exception {
+            public Integer call() {
                 return limboServer != null ? limboServer.getPlayersConnected().size() : 0;
             }
         }));
@@ -180,10 +177,6 @@ public class VelocityLimboHandler {
 
     public static PlayerManager getPlayerManager() {
         return playerManager;
-    }
-
-    public static YamlDocument getConfig() {
-        return config;
     }
 
     public static YamlDocument getMessageConfig() {

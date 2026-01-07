@@ -66,7 +66,6 @@ public class Utility {
 
     /**
      * Check if a specific server is in maintenance mode
-     *
      * @param serverName The name of the server to check
      * @return true if the server is in maintenance, false otherwise
      */
@@ -146,7 +145,7 @@ public class Utility {
     }
 
     /**
-     *
+     * Check if a player is whitelisted on the server that has maintenance
      * @param player The player you want to check is whitelisted
      * @return true if whitelisted, otherwise returns false
      */

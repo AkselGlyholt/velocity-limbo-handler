@@ -23,6 +23,10 @@ public class PlayerManager {
     private final Map<UUID, String> playerConnectionIssues = new ConcurrentHashMap<>();
     private static String queuePositionMsg;
 
+    /**
+     * @param player the player of which you're checking
+     * @return returns a boolean value, true or false depending on if the player is blocked
+     */
     private boolean isAuthBlocked(Player player) {
         var am = VelocityLimboHandler.getAuthManager();
         return am != null && am.isAuthBlocked(player);
@@ -35,6 +39,11 @@ public class PlayerManager {
         queuePositionMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("queuePositionJoin"));
     }
 
+    /**
+     * Initialize a player into the system
+     * @param player The player you're trying to add
+     * @param registeredServer The server of which the player should be reconnected to
+     */
     public void addPlayer(Player player, RegisteredServer registeredServer) {
         // Don't override if the player is already registered
         if (this.playerData.containsKey(player)) return;
@@ -56,7 +65,10 @@ public class PlayerManager {
         }
     }
 
-
+    /**
+     * Removes a player from the system
+     * @param player The player to remove
+     */
     public void removePlayer(Player player) {
         removePlayerFromQueue(player);
         this.playerData.remove(player);
@@ -64,6 +76,11 @@ public class PlayerManager {
         VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
     }
 
+    /**
+     * Get the server that the player is trying to reconnect to
+     * @param player The player of which
+     * @return Returns a server of type RegisteredServer
+     */
     public RegisteredServer getPreviousServer(Player player) {
         String serverName = this.playerData.get(player);
 
@@ -173,6 +190,7 @@ public class PlayerManager {
     }
 
     /**
+     * Set the players status to connecting to a server, so we don't try and connect them twice
      * @param player is the player of which you want to set the status of
      * @param add    is whether you want to add the player, or remove it
      */
