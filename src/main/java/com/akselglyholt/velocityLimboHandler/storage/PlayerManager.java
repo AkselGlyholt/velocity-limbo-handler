@@ -75,6 +75,7 @@ public class PlayerManager {
         removePlayerFromQueue(player);
         this.playerData.remove(playerId);
         this.connectingPlayers.remove(playerId);
+        this.playerConnectionIssues.remove(playerId);
         VelocityLimboHandler.getReconnectBlocker().unblock(playerId);
     }
 
@@ -187,6 +188,11 @@ public class PlayerManager {
                 .orElse(true));
 
         connectingPlayers.keySet().removeIf(playerId -> VelocityLimboHandler.getProxyServer()
+                .getPlayer(playerId)
+                .map(player -> !player.isActive())
+                .orElse(true));
+
+        playerConnectionIssues.keySet().removeIf(playerId -> VelocityLimboHandler.getProxyServer()
                 .getPlayer(playerId)
                 .map(player -> !player.isActive())
                 .orElse(true));
