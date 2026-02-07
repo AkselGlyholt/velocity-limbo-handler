@@ -45,7 +45,7 @@ public class QueueNotifierTask implements Runnable {
                 String formatedMsg = MessageFormatter.formatMessage(configManager.getMaintenanceModeMsg(), player);
 
                 player.sendMessage(miniMessage.deserialize(formatedMsg));
-                return;
+                continue;
             }
 
             // Only show queue position if queue is enabled

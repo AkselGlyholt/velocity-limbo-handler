@@ -65,13 +65,13 @@ public class ReconnectionTask implements Runnable {
                     RegisteredServer previousServer = playerManager.getPreviousServer(player);
 
                     if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
-                        // Check if the player has whitelist or another bypass to join, or continue to next player
-                        if (player.hasPermission("maintenance.admin")
+                        // Continue only if player does NOT have a maintenance bypass/whitelist entry
+                        boolean canBypassMaintenance = player.hasPermission("maintenance.admin")
                                 || player.hasPermission("maintenance.bypass")
                                 || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())
-                                || Utility.playerMaintenanceWhitelisted(player)
-                                || authManager.isAuthBlocked(player)) {
-                            // Can't join server whilst in Maintenance, or player is Auth Blocked so continue to next
+                                || Utility.playerMaintenanceWhitelisted(player);
+
+                        if (!canBypassMaintenance) {
                             continue;
                         }
                     }

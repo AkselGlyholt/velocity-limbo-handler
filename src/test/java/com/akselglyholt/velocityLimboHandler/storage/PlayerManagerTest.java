@@ -71,10 +71,14 @@ class PlayerManagerTest {
         Player player = mock(Player.class);
         RegisteredServer server = mock(RegisteredServer.class);
         ServerInfo info = mock(ServerInfo.class);
+        UUID playerId = UUID.randomUUID();
 
+        when(player.getUniqueId()).thenReturn(playerId);
+        when(player.isActive()).thenReturn(true);
+        when(proxyServer.getPlayer(playerId)).thenReturn(Optional.of(player));
         when(server.getServerInfo()).thenReturn(info);
         when(info.getName()).thenReturn("survival");
-        
+
         // Stub proxyServer to return the server
         when(proxyServer.getServer("survival")).thenReturn(Optional.of(server));
 
@@ -92,6 +96,8 @@ class PlayerManagerTest {
         UUID uuid = UUID.randomUUID();
 
         when(player.getUniqueId()).thenReturn(uuid);
+        when(player.isActive()).thenReturn(true);
+        when(proxyServer.getPlayer(uuid)).thenReturn(Optional.of(player));
         when(server.getServerInfo()).thenReturn(info);
         when(info.getName()).thenReturn("survival");
 
@@ -110,7 +116,15 @@ class PlayerManagerTest {
         Player player2 = mock(Player.class);
         RegisteredServer server = mock(RegisteredServer.class);
         ServerInfo info = mock(ServerInfo.class);
+        UUID player1Id = UUID.randomUUID();
+        UUID player2Id = UUID.randomUUID();
 
+        when(player1.getUniqueId()).thenReturn(player1Id);
+        when(player2.getUniqueId()).thenReturn(player2Id);
+        when(player1.isActive()).thenReturn(true);
+        when(player2.isActive()).thenReturn(true);
+        when(proxyServer.getPlayer(player1Id)).thenReturn(Optional.of(player1));
+        when(proxyServer.getPlayer(player2Id)).thenReturn(Optional.of(player2));
         when(server.getServerInfo()).thenReturn(info);
         when(info.getName()).thenReturn("survival");
 

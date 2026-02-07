@@ -13,12 +13,11 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.function.Supplier;
 
 public class PlayerManager {
-    private final Map<Player, String> playerData;
-    private final Map<Player, Boolean> connectingPlayers;
-    private final Map<String, Queue<Player>> reconnectQueues = new ConcurrentHashMap<>();
+    private final Map<UUID, String> playerData;
+    private final Map<UUID, Boolean> connectingPlayers;
+    private final Map<String, Queue<UUID>> reconnectQueues = new ConcurrentHashMap<>();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Map<UUID, String> playerConnectionIssues = new ConcurrentHashMap<>();
     private static String queuePositionMsg;
@@ -45,19 +44,21 @@ public class PlayerManager {
      * @param registeredServer The server of which the player should be reconnected to
      */
     public void addPlayer(Player player, RegisteredServer registeredServer) {
+        UUID playerId = player.getUniqueId();
+
         // Don't override if the player is already registered
-        if (this.playerData.containsKey(player)) return;
+        if (this.playerData.containsKey(playerId)) return;
 
         if (isAuthBlocked(player)) return;
 
         String serverName = registeredServer.getServerInfo().getName();
-        this.playerData.put(player, serverName);
+        this.playerData.put(playerId, serverName);
 
         Utility.sendWelcomeMessage(player, null);
 
         // Only maintain a reconnect queue when queue mode is enabled
-        Queue<Player> queue = reconnectQueues.computeIfAbsent(serverName, s -> new ConcurrentLinkedQueue<>());
-        if (VelocityLimboHandler.isQueueEnabled() && !queue.contains(player)) {
+        Queue<UUID> queue = reconnectQueues.computeIfAbsent(serverName, s -> new ConcurrentLinkedQueue<>());
+        if (VelocityLimboHandler.isQueueEnabled() && !queue.contains(playerId)) {
             addPlayerToQueue(player, registeredServer);
 
             String formatedMsg = MessageFormatter.formatMessage(queuePositionMsg, player);
@@ -70,10 +71,11 @@ public class PlayerManager {
      * @param player The player to remove
      */
     public void removePlayer(Player player) {
+        UUID playerId = player.getUniqueId();
         removePlayerFromQueue(player);
-        this.playerData.remove(player);
-        this.connectingPlayers.remove(player);
-        VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
+        this.playerData.remove(playerId);
+        this.connectingPlayers.remove(playerId);
+        VelocityLimboHandler.getReconnectBlocker().unblock(playerId);
     }
 
     /**
@@ -82,7 +84,7 @@ public class PlayerManager {
      * @return Returns a server of type RegisteredServer
      */
     public RegisteredServer getPreviousServer(Player player) {
-        String serverName = this.playerData.get(player);
+        String serverName = this.playerData.get(player.getUniqueId());
 
         if (serverName != null) {
             return VelocityLimboHandler.getProxyServer()
@@ -94,44 +96,60 @@ public class PlayerManager {
     }
 
     public boolean isPlayerRegistered(Player player) {
-        return playerData.containsKey(player);
+        return playerData.containsKey(player.getUniqueId());
     }
 
     public void addPlayerToQueue(Player player, RegisteredServer server) {
-        reconnectQueues.computeIfAbsent(server.getServerInfo().getName(), s -> new ConcurrentLinkedQueue<>()).add(player);
+        reconnectQueues
+                .computeIfAbsent(server.getServerInfo().getName(), s -> new ConcurrentLinkedQueue<>())
+                .add(player.getUniqueId());
     }
 
     public void removePlayerFromQueue(Player player) {
-        String serverName = this.playerData.get(player);
-        if (serverName == null && VelocityLimboHandler.getDirectConnectServer() != null) {
-            serverName = VelocityLimboHandler.getDirectConnectServer().getServerInfo().getName();
-        }
-
-        if (serverName == null) return;
-
-        Queue<Player> queue = reconnectQueues.get(serverName);
-        if (queue != null) queue.remove(player);
+        UUID playerId = player.getUniqueId();
+        reconnectQueues.values().forEach(queue -> queue.remove(playerId));
     }
 
     public Player getNextQueuedPlayer(RegisteredServer server) {
-        Queue<Player> queue = reconnectQueues.get(server.getServerInfo().getName());
-        return queue == null ? null : queue.peek();
+        Queue<UUID> queue = reconnectQueues.get(server.getServerInfo().getName());
+        if (queue == null) return null;
+
+        while (!queue.isEmpty()) {
+            UUID queuedPlayerId = queue.peek();
+            if (queuedPlayerId == null) return null;
+
+            Player queuedPlayer = VelocityLimboHandler.getProxyServer().getPlayer(queuedPlayerId).orElse(null);
+            if (queuedPlayer != null && queuedPlayer.isActive()) {
+                return queuedPlayer;
+            }
+
+            queue.poll();
+            playerData.remove(queuedPlayerId);
+            connectingPlayers.remove(queuedPlayerId);
+            playerConnectionIssues.remove(queuedPlayerId);
+        }
+
+        return null;
     }
 
     public boolean hasQueuedPlayers(RegisteredServer server) {
-        Queue<Player> queue = reconnectQueues.get(server.getServerInfo().getName());
-        return queue != null && !queue.isEmpty();
+        Queue<UUID> queue = reconnectQueues.get(server.getServerInfo().getName());
+        if (queue == null || queue.isEmpty()) return false;
+
+        getNextQueuedPlayer(server); // prune stale queue entries
+        return !queue.isEmpty();
     }
 
     public int getQueuePosition(Player player) {
         RegisteredServer server = getPreviousServer(player);
 
-        Queue<Player> queue = reconnectQueues.get(server.getServerInfo().getName());
+        Queue<UUID> queue = reconnectQueues.get(server.getServerInfo().getName());
         if (queue == null) return -1;
 
         int position = 1;
-        for (Player p : queue) {
-            if (p.equals(player)) return position;
+        UUID targetId = player.getUniqueId();
+        for (UUID playerId : queue) {
+            if (playerId.equals(targetId)) return position;
             position++;
         }
 
@@ -156,10 +174,22 @@ public class PlayerManager {
     }
 
     public void pruneInactivePlayers() {
-        for (Queue<Player> queue : reconnectQueues.values()) {
-            queue.removeIf(p -> !p.isActive());
+        for (Queue<UUID> queue : reconnectQueues.values()) {
+            queue.removeIf(playerId -> VelocityLimboHandler.getProxyServer()
+                    .getPlayer(playerId)
+                    .map(player -> !player.isActive())
+                    .orElse(true));
         }
-        playerData.keySet().removeIf(p -> !p.isActive());
+
+        playerData.keySet().removeIf(playerId -> VelocityLimboHandler.getProxyServer()
+                .getPlayer(playerId)
+                .map(player -> !player.isActive())
+                .orElse(true));
+
+        connectingPlayers.keySet().removeIf(playerId -> VelocityLimboHandler.getProxyServer()
+                .getPlayer(playerId)
+                .map(player -> !player.isActive())
+                .orElse(true));
     }
 
     /**
@@ -168,11 +198,14 @@ public class PlayerManager {
      */
     public static Player findFirstMaintenanceAllowedPlayer(RegisteredServer server) {
         // Find the queue for the server
-        Queue<Player> queue = VelocityLimboHandler.getPlayerManager().reconnectQueues.get(server.getServerInfo().getName());
+        Queue<UUID> queue = VelocityLimboHandler.getPlayerManager().reconnectQueues.get(server.getServerInfo().getName());
         if (queue == null) return null;
 
         // Loop through all players and check if any match is found
-        for (Player player : queue) {
+        for (UUID playerId : queue) {
+            Player player = VelocityLimboHandler.getProxyServer().getPlayer(playerId).orElse(null);
+            if (player == null || !player.isActive()) continue;
+
             if (player.hasPermission("maintenance.admin")
                     || player.hasPermission("maintenance.bypass")
                     || player.hasPermission("maintenance.singleserver.bypass." + server.getServerInfo().getName())
@@ -186,7 +219,7 @@ public class PlayerManager {
 
     // Check if player is in the hashmap
     public boolean isPlayerConnecting(Player player) {
-        return this.connectingPlayers.containsKey(player);
+        return this.connectingPlayers.containsKey(player.getUniqueId());
     }
 
     /**
@@ -195,10 +228,11 @@ public class PlayerManager {
      * @param add    is whether you want to add the player, or remove it
      */
     public void setPlayerConnecting(Player player, Boolean add) {
+        UUID playerId = player.getUniqueId();
         if (add) {
-            this.connectingPlayers.put(player, true);
+            this.connectingPlayers.put(playerId, true);
         } else {
-            this.connectingPlayers.remove(player);
+            this.connectingPlayers.remove(playerId);
         }
     }
 }

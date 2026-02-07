@@ -10,13 +10,21 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Utility {
     private static final MiniMessage miniMessage = MiniMessage.miniMessage();
     private static final String welcomeMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("welcomeMessage"));
+    private static final Map<Class<?>, Method> IS_MAINTENANCE_NO_ARG_CACHE = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Method> IS_MAINTENANCE_STRING_CACHE = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Method> GET_SERVER_CACHE = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Method> IS_MAINTENANCE_SERVER_CACHE = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Method> GET_SETTINGS_CACHE = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Method> GET_WHITELISTED_PLAYERS_CACHE = new ConcurrentHashMap<>();
 
     // Returns whether the names of the servers match.
     public static boolean doServerNamesMatch(@NotNull RegisteredServer var0, @NotNull RegisteredServer var1) {
@@ -60,6 +68,37 @@ public class Utility {
         VelocityLimboHandler.getLogger().info(message);
     }
 
+    private static Method getCachedMethod(Map<Class<?>, Method> cache, Class<?> targetClass, String methodName, Class<?>... paramTypes) {
+        return cache.computeIfAbsent(targetClass, key -> {
+            try {
+                return key.getMethod(methodName, paramTypes);
+            } catch (NoSuchMethodException ignored) {
+                return null;
+            }
+        });
+    }
+
+    private static Method resolveServerMaintenanceMethod(Class<?> apiClass, Class<?> serverClass) {
+        Method cached = IS_MAINTENANCE_SERVER_CACHE.get(apiClass);
+        if (cached != null && cached.getParameterTypes()[0].isAssignableFrom(serverClass)) {
+            return cached;
+        }
+
+        for (Method method : apiClass.getMethods()) {
+            if (!method.getName().equals("isMaintenance") || method.getParameterCount() != 1) {
+                continue;
+            }
+
+            Class<?> paramType = method.getParameterTypes()[0];
+            if (paramType.isAssignableFrom(serverClass)) {
+                IS_MAINTENANCE_SERVER_CACHE.put(apiClass, method);
+                return method;
+            }
+        }
+
+        return null;
+    }
+
     public static boolean hasMaintenance() {
         return VelocityLimboHandler.hasMaintenancePlugin();
     }
@@ -80,67 +119,52 @@ public class Utility {
                 return false;
             }
 
+            Class<?> apiClass = maintenanceAPI.getClass();
+
             // First check if the entire proxy is in maintenance
-            try {
-                boolean globalMaintenance = (boolean) maintenanceAPI.getClass()
-                        .getMethod("isMaintenance")
-                        .invoke(maintenanceAPI);
-                if (globalMaintenance) {
-                    return true; // If proxy is in global maintenance, all servers are in maintenance
-                }
-            } catch (Exception e) {
-                // Ignore, continue to server-specific check
-            }
-
-            // Now try server-specific maintenance using different approaches
-            try {
-                // Approach 1: Try direct server name method (if it exists)
+            Method globalMaintenanceMethod = getCachedMethod(IS_MAINTENANCE_NO_ARG_CACHE, apiClass, "isMaintenance");
+            if (globalMaintenanceMethod != null) {
                 try {
-                    boolean result = (boolean) maintenanceAPI.getClass()
-                            .getMethod("isMaintenance", String.class)
-                            .invoke(maintenanceAPI, serverName);
-                    return result;
-                } catch (NoSuchMethodException e) {
-                    // Method doesn't exist, try server object approach
-                }
-
-                // Approach 2: Get server object first
-                Object server = maintenanceAPI.getClass()
-                        .getMethod("getServer", String.class)
-                        .invoke(maintenanceAPI, serverName);
-
-                if (server == null) {
-                    // Server not configured in maintenance plugin, assume not in maintenance
-                    return false;
-                }
-
-                // Try different method signatures for isMaintenance
-                Class<?> apiClass = maintenanceAPI.getClass();
-                java.lang.reflect.Method[] methods = apiClass.getMethods();
-
-                for (java.lang.reflect.Method method : methods) {
-                    if (method.getName().equals("isMaintenance") &&
-                            method.getParameterCount() == 1) {
-
-                        Class<?> paramType = method.getParameterTypes()[0];
-                        if (paramType.isAssignableFrom(server.getClass())) {
-                            boolean result = (boolean) method.invoke(maintenanceAPI, server);
-                            return result;
-                        }
+                    boolean globalMaintenance = (boolean) globalMaintenanceMethod.invoke(maintenanceAPI);
+                    if (globalMaintenance) {
+                        return true;
                     }
+                } catch (Exception ignored) {
+                    // Ignore and continue to server-specific checks
                 }
+            }
 
-                // If no suitable method found, return false
-                return false;
+            // Try direct name-based check first
+            Method stringMaintenanceMethod = getCachedMethod(IS_MAINTENANCE_STRING_CACHE, apiClass, "isMaintenance", String.class);
+            if (stringMaintenanceMethod != null) {
+                try {
+                    return (boolean) stringMaintenanceMethod.invoke(maintenanceAPI, serverName);
+                } catch (Exception ignored) {
+                    // Ignore and continue to server-object checks
+                }
+            }
 
-            } catch (Exception ex) {
-                VelocityLimboHandler.getLogger().info("Server-specific maintenance check failed for '" + serverName + "': " + ex.getMessage());
+            // Try server-object based check
+            Method getServerMethod = getCachedMethod(GET_SERVER_CACHE, apiClass, "getServer", String.class);
+            if (getServerMethod == null) {
                 return false;
             }
+
+            Object server = getServerMethod.invoke(maintenanceAPI, serverName);
+            if (server == null) {
+                return false;
+            }
+
+            Method serverMaintenanceMethod = resolveServerMaintenanceMethod(apiClass, server.getClass());
+            if (serverMaintenanceMethod == null) {
+                return false;
+            }
+
+            return (boolean) serverMaintenanceMethod.invoke(maintenanceAPI, server);
 
         } catch (Exception e) {
             VelocityLimboHandler.getLogger().warning("Failed to check maintenance status for server '" + serverName + "': " + e.getMessage());
-            return false; // Assume not in maintenance if check fails
+            return false;
         }
     }
 
@@ -160,20 +184,28 @@ public class Utility {
                 return false;
             }
 
-            // Use reflection to get the settings object
-            Object settings = maintenanceAPI.getClass()
-                    .getMethod("getSettings")
-                    .invoke(maintenanceAPI);
+            Method getSettingsMethod = getCachedMethod(GET_SETTINGS_CACHE, maintenanceAPI.getClass(), "getSettings");
+            if (getSettingsMethod == null) {
+                return false;
+            }
 
+            Object settings = getSettingsMethod.invoke(maintenanceAPI);
             if (settings == null) {
                 return false;
             }
 
-            // Use reflection to get the whitelist map
-            java.lang.reflect.Method getWhitelistedPlayersMethod = settings.getClass().getMethod("getWhitelistedPlayers");
+            Method getWhitelistedPlayersMethod = getCachedMethod(
+                    GET_WHITELISTED_PLAYERS_CACHE,
+                    settings.getClass(),
+                    "getWhitelistedPlayers"
+            );
+            if (getWhitelistedPlayersMethod == null) {
+                return false;
+            }
+
             Object whitelistMapObj = getWhitelistedPlayersMethod.invoke(settings);
 
-            if (!(whitelistMapObj instanceof Map<?,?>)) {
+            if (!(whitelistMapObj instanceof Map<?, ?>)) {
                 return false;
             }
 
