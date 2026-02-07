@@ -30,26 +30,38 @@ public class ReconnectHandler {
         this.logger = logger;
     }
 
-    public void reconnectPlayer(Player player) {
-        if (player == null || !player.isActive()) return;
-        if (authManager.isAuthBlocked(player)) return;
+    public boolean reconnectPlayer(Player player) {
+        if (player == null || !player.isActive()) return false;
+        if (authManager.isAuthBlocked(player)) return false;
 
         RegisteredServer previousServer = playerManager.getPreviousServer(player);
+        if (previousServer == null) return false;
+
+        if (playerManager.isPlayerConnecting(player)) return false;
+
+        playerManager.setPlayerConnecting(player, true);
 
         // If enabled, check if a server responds to pings before connecting, asynchronously
         previousServer.ping().whenComplete((ping, throwable) -> {
             if (throwable != null || ping == null) {
+                playerManager.setPlayerConnecting(player, false);
                 return; // Server offline
             }
 
             // Check if the server is full
-            if (ping.getPlayers().isEmpty()) return;
+            if (ping.getPlayers().isEmpty()) {
+                playerManager.setPlayerConnecting(player, false);
+                return;
+            }
 
             ServerPing.Players serverPlayers = ping.getPlayers().get();
             int maxPlayers = serverPlayers.getMax();
             int onlinePlayers = serverPlayers.getOnline();
 
-            if (maxPlayers <= onlinePlayers) return;
+            if (maxPlayers <= onlinePlayers) {
+                playerManager.setPlayerConnecting(player, false);
+                return;
+            }
 
             // Check if maintenance mode is enabled on Backend Server
             if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
@@ -60,13 +72,10 @@ public class ReconnectHandler {
                         || Utility.playerMaintenanceWhitelisted(player)) {
                     logger.info("[Maintenance Bypass] " + player.getUsername() + " bypassed queue to join " + previousServer.getServerInfo().getName());
                 } else {
+                    playerManager.setPlayerConnecting(player, false);
                     return;
                 }
             }
-
-            if (playerManager.isPlayerConnecting(player)) return;
-
-            playerManager.setPlayerConnecting(player, true);
 
             Utility.logInformational(String.format("Connecting %s to %s", player.getUsername(), previousServer.getServerInfo().getName()));
 
@@ -121,6 +130,8 @@ public class ReconnectHandler {
                 }
             }));
         });
+
+        return true;
     }
 
     private boolean playerConnectIssue(Player player, String reason) {

@@ -76,8 +76,10 @@ public class ReconnectionTask implements Runnable {
                         }
                     }
 
-                    reconnectHandler.reconnectPlayer(player);
-                    break;
+                    boolean reconnectAttempted = reconnectHandler.reconnectPlayer(player);
+                    if (reconnectAttempted) {
+                        break;
+                    }
                 }
             }
         }
