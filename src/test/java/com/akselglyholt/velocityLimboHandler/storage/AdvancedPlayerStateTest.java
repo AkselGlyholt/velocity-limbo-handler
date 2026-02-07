@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -107,7 +108,13 @@ class AdvancedPlayerStateTest {
 
         playerManager.addPlayer(inactive, server);
         playerManager.addPlayer(active, server);
-        playerManager.addPlayerToQueue(mockPlayer(missingId, true), server);
+        
+        Player missingPlayer = mock(Player.class);
+        when(missingPlayer.getUniqueId()).thenReturn(missingId);
+        playerManager.addPlayerToQueue(missingPlayer, server);
+
+        // Stub missingId to be empty AFTER addPlayerToQueue to ensure it stays empty
+        when(proxyServer.getPlayer(missingId)).thenReturn(Optional.empty());
 
         // Order in queue: inactive -> active -> missing; first call should return active and prune inactive.
         Player next = playerManager.getNextQueuedPlayer(server);
@@ -184,10 +191,20 @@ class AdvancedPlayerStateTest {
 
         when(configManager.isQueueEnabled()).thenReturn(false);
         when(limboServer.getPlayersConnected()).thenReturn(limboPlayers);
-        when(playerManager.hasConnectionIssue(first)).thenReturn(false);
-        when(playerManager.hasConnectionIssue(second)).thenReturn(false);
-        when(playerManager.getPreviousServer(first)).thenReturn(previousServer);
-        when(playerManager.getPreviousServer(second)).thenReturn(previousServer);
+        
+        playerManager.addPlayerWithIssue(first, "fake-issue"); // doesn't matter, we want hasConnectionIssue to return false for second
+        playerManager.removePlayerIssue(first);
+        playerManager.removePlayerIssue(second);
+        
+        // Use real playerManager methods instead of stubbing them if possible, or use spies.
+        // Since playerManager is a real object, we should ideally NOT stub it.
+        // But the previous sub-agent tried to stub it.
+        
+        // Let's just fix the stubbing style to avoid the getUniqueId() call on the mock during stubbing.
+        // Actually, PlayerManager is a simple state holder. Let's just set the state.
+        
+        playerManager.addPlayer(first, previousServer);
+        playerManager.addPlayer(second, previousServer);
 
         when(reconnectHandler.reconnectPlayer(first)).thenReturn(false);
         when(reconnectHandler.reconnectPlayer(second)).thenReturn(true);
@@ -219,10 +236,11 @@ class AdvancedPlayerStateTest {
 
         when(configManager.isQueueEnabled()).thenReturn(false);
         when(limboServer.getPlayersConnected()).thenReturn(List.of(authBlocked, eligible));
-        when(playerManager.hasConnectionIssue(authBlocked)).thenReturn(false);
-        when(playerManager.hasConnectionIssue(eligible)).thenReturn(false);
-        when(playerManager.getPreviousServer(authBlocked)).thenReturn(previousServer);
-        when(playerManager.getPreviousServer(eligible)).thenReturn(previousServer);
+        
+        playerManager.addPlayer(authBlocked, previousServer);
+        playerManager.addPlayer(eligible, previousServer);
+        playerManager.removePlayerIssue(authBlocked);
+        playerManager.removePlayerIssue(eligible);
 
         // Simulates reconnect handler rejecting an auth-blocked player.
         when(reconnectHandler.reconnectPlayer(authBlocked)).thenReturn(false);
