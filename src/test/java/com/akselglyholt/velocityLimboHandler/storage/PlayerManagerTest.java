@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -49,11 +51,11 @@ class PlayerManagerTest {
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getMessageConfig).thenReturn(messageConfig);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getDirectConnectServer).thenReturn(directConnectServer);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getLogger).thenReturn(logger);
-        
+
         // Default behavior
         mockedVelocityLimboHandler.when(VelocityLimboHandler::isQueueEnabled).thenReturn(true);
         when(messageConfig.getString(any(Route.class))).thenReturn("Queue Position: %position%");
-        
+
         ServerInfo directInfo = mock(ServerInfo.class);
         when(directInfo.getName()).thenReturn("hub");
         when(directConnectServer.getServerInfo()).thenReturn(directInfo);
@@ -132,16 +134,52 @@ class PlayerManagerTest {
         playerManager.addPlayer(player2, server); // Implicitly adds to queue if queue enabled
 
         assertTrue(playerManager.hasQueuedPlayers(server));
-        
+
         // Verify queue order
         assertEquals(player1, playerManager.getNextQueuedPlayer(server));
-        
+
         // getNextQueuedPlayer acts as peek, doesn't remove
-        assertEquals(player1, playerManager.getNextQueuedPlayer(server)); 
-        
+        assertEquals(player1, playerManager.getNextQueuedPlayer(server));
+
         // Remove player 1
         playerManager.removePlayerFromQueue(player1);
-        
+
         assertEquals(player2, playerManager.getNextQueuedPlayer(server));
+    }
+
+    @Test
+    void testGetQueueForServerAndCounts() {
+        Player player1 = mock(Player.class);
+        Player player2 = mock(Player.class);
+        RegisteredServer server = mock(RegisteredServer.class);
+        ServerInfo info = mock(ServerInfo.class);
+        UUID player1Id = UUID.randomUUID();
+        UUID player2Id = UUID.randomUUID();
+
+        when(player1.getUniqueId()).thenReturn(player1Id);
+        when(player2.getUniqueId()).thenReturn(player2Id);
+        when(player1.getUsername()).thenReturn("Alpha");
+        when(player2.getUsername()).thenReturn("Bravo");
+        when(player1.isActive()).thenReturn(true);
+        when(player2.isActive()).thenReturn(true);
+        when(proxyServer.getPlayer(player1Id)).thenReturn(Optional.of(player1));
+        when(proxyServer.getPlayer(player2Id)).thenReturn(Optional.of(player2));
+        when(server.getServerInfo()).thenReturn(info);
+        when(info.getName()).thenReturn("survival");
+
+        playerManager.addPlayer(player1, server);
+        playerManager.addPlayer(player2, server);
+
+        List<PlayerManager.QueuedPlayer> queue = playerManager.getQueueForServer("survival");
+        Map<String, Integer> counts = playerManager.getQueuedServerCounts();
+
+        assertEquals(2, queue.size());
+        assertEquals("Alpha", queue.get(0).name());
+        assertEquals("Bravo", queue.get(1).name());
+        assertEquals(player1Id, queue.get(0).uuid());
+        assertEquals(player2Id, queue.get(1).uuid());
+
+        assertEquals(1, counts.size());
+        assertEquals(2, counts.get("survival"));
     }
 }
