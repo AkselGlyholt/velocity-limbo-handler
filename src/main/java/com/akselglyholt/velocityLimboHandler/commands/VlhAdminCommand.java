@@ -23,6 +23,7 @@ public class VlhAdminCommand implements SimpleCommand {
 
     private static final String PREFIX = "<dark_gray>[</dark_gray><aqua>VLH</aqua><dark_gray>]</dark_gray> ";
     private static final String BORDER = "<dark_gray><strikethrough>------------------------------</strikethrough></dark_gray>";
+    private static final int QUEUE_PAGE_SIZE = 10;
 
     private final MiniMessage miniMessage;
 
@@ -132,27 +133,54 @@ public class VlhAdminCommand implements SimpleCommand {
             return;
         }
 
-        PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
-
-        if (arguments.length < 2) {
-            Map<String, Integer> queueCounts = playerManager.getQueuedServerCounts();
-            if (queueCounts.isEmpty()) {
-                send(source, "<yellow>No servers currently have queued players.</yellow>");
-                return;
-            }
-
-            source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
-            send(source, "<gradient:#00D4FF:#7AF7C5><bold>Queue Overview</bold></gradient>");
-            queueCounts.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey())
-                    .forEach(entry -> send(source,
-                            "<gray>•</gray> <aqua>" + entry.getKey() + "</aqua>: <white>" + entry.getValue() + "</white>"
-                                    + " <gray>player" + (entry.getValue() == 1 ? "" : "s") + "</gray>"));
-            source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
+        if (arguments.length == 1) {
+            showQueueOverview(source, 1);
             return;
         }
 
-        String serverName = arguments[1];
+        String secondArg = arguments[1];
+        if (isPositiveInteger(secondArg)) {
+            showQueueOverview(source, Integer.parseInt(secondArg));
+            return;
+        }
+
+        String serverName = secondArg;
+        int page = arguments.length >= 3 ? parsePositiveInteger(arguments[2], 1) : 1;
+        showServerQueue(source, serverName, page);
+    }
+
+    private void showQueueOverview(CommandSource source, int requestedPage) {
+        PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
+        List<Map.Entry<String, Integer>> serverQueues = playerManager.getQueuedServerCounts().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .toList();
+
+        if (serverQueues.isEmpty()) {
+            send(source, "<yellow>No servers currently have queued players.</yellow>");
+            return;
+        }
+
+        int totalPages = getTotalPages(serverQueues.size(), QUEUE_PAGE_SIZE);
+        int currentPage = clampPage(requestedPage, totalPages);
+        int startIndex = (currentPage - 1) * QUEUE_PAGE_SIZE;
+        int endIndex = Math.min(startIndex + QUEUE_PAGE_SIZE, serverQueues.size());
+
+        source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
+        send(source, "<gradient:#00D4FF:#7AF7C5><bold>Queue Overview</bold></gradient>");
+
+        for (int i = startIndex; i < endIndex; i++) {
+            Map.Entry<String, Integer> entry = serverQueues.get(i);
+            send(source,
+                    "<gray>•</gray> <aqua>" + entry.getKey() + "</aqua>: <white>" + entry.getValue() + "</white>"
+                            + " <gray>player" + (entry.getValue() == 1 ? "" : "s") + "</gray>");
+        }
+
+        sendPagination(source, currentPage, totalPages, "/vlh queue " + (currentPage - 1), "/vlh queue " + (currentPage + 1));
+        source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
+    }
+
+    private void showServerQueue(CommandSource source, String serverName, int requestedPage) {
+        PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
         List<PlayerManager.QueuedPlayer> queue = playerManager.getQueueForServer(serverName);
 
         if (queue.isEmpty()) {
@@ -160,10 +188,15 @@ public class VlhAdminCommand implements SimpleCommand {
             return;
         }
 
+        int totalPages = getTotalPages(queue.size(), QUEUE_PAGE_SIZE);
+        int currentPage = clampPage(requestedPage, totalPages);
+        int startIndex = (currentPage - 1) * QUEUE_PAGE_SIZE;
+        int endIndex = Math.min(startIndex + QUEUE_PAGE_SIZE, queue.size());
+
         source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
         send(source, "<gradient:#00D4FF:#7AF7C5><bold>Queue for " + serverName + "</bold></gradient>");
 
-        for (int i = 0; i < queue.size(); i++) {
+        for (int i = startIndex; i < endIndex; i++) {
             PlayerManager.QueuedPlayer queuedPlayer = queue.get(i);
             int position = i + 1;
             send(source,
@@ -172,18 +205,70 @@ public class VlhAdminCommand implements SimpleCommand {
                             + queuedPlayer.name() + "</hover></aqua>");
         }
 
+        sendPagination(
+                source,
+                currentPage,
+                totalPages,
+                "/vlh queue " + serverName + " " + (currentPage - 1),
+                "/vlh queue " + serverName + " " + (currentPage + 1)
+        );
         source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
     }
 
+    private void sendPagination(CommandSource source, int currentPage, int totalPages, String previousCommand, String nextCommand) {
+        boolean hasPrevious = currentPage > 1;
+        boolean hasNext = currentPage < totalPages;
+
+        String previous = hasPrevious
+                ? "<aqua><hover:show_text:'<gray>Go to previous page</gray>'><click:run_command:'" + previousCommand + "'>[Previous]</click></hover></aqua>"
+                : "<dark_gray>[Previous]</dark_gray>";
+
+        String next = hasNext
+                ? "<aqua><hover:show_text:'<gray>Go to next page</gray>'><click:run_command:'" + nextCommand + "'>[Next]</click></hover></aqua>"
+                : "<dark_gray>[Next]</dark_gray>";
+
+        send(source,
+                previous
+                        + " <dark_gray>|</dark_gray> "
+                        + "<gray>Page <white>" + currentPage + "</white>/<white>" + totalPages + "</white></gray>"
+                        + " <dark_gray>|</dark_gray> "
+                        + next);
+    }
+
+    private int getTotalPages(int itemCount, int pageSize) {
+        return Math.max(1, (int) Math.ceil((double) itemCount / pageSize));
+    }
+
+    private int clampPage(int requestedPage, int totalPages) {
+        return Math.max(1, Math.min(requestedPage, totalPages));
+    }
+
+    private boolean isPositiveInteger(String input) {
+        try {
+            return Integer.parseInt(input) > 0;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+    }
+
+    private int parsePositiveInteger(String input, int fallback) {
+        try {
+            int parsed = Integer.parseInt(input);
+            return parsed > 0 ? parsed : fallback;
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
     private void sendUsage(CommandSource source) {
-        source.sendMessage(miniMessage.deserialize(PREFIX + "<yellow>Usage:</yellow> <white>/vlh &lt;reload|status|queue [server]&gt;</white>"));
+        source.sendMessage(miniMessage.deserialize(PREFIX + "<yellow>Usage:</yellow> <white>/vlh &lt;reload|status|queue [page]|queue [server] [page]&gt;</white>"));
         source.sendMessage(miniMessage.deserialize(
                 PREFIX + "<gray>Commands:</gray> "
                         + "<aqua><hover:show_text:'<gray>Reload VLH configuration and messages</gray>'><click:run_command:'/vlh reload'>reload</click></hover></aqua>"
                         + "<gray> • </gray>"
                         + "<aqua><hover:show_text:'<gray>View plugin runtime status</gray>'><click:run_command:'/vlh status'>status</click></hover></aqua>"
                         + "<gray> • </gray>"
-                        + "<aqua><hover:show_text:'<gray>Show queue status for all servers or one server</gray>'><click:run_command:'/vlh queue'>queue</click></hover></aqua>"
+                        + "<aqua><hover:show_text:'<gray>Show queue status (supports pagination)</gray>'><click:run_command:'/vlh queue'>queue</click></hover></aqua>"
         ));
     }
 
