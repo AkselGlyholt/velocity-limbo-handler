@@ -3,6 +3,7 @@ package com.akselglyholt.velocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlockRule;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
+import com.akselglyholt.velocityLimboHandler.commands.VlhAdminCommand;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
@@ -115,6 +116,11 @@ public class VelocityLimboHandler {
 
         eventManger.register(this, new ConnectionListener());
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker));
+
+        proxyServer.getCommandManager().register(
+                proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(),
+                new VlhAdminCommand()
+        );
 
         getLogger().info("Queue Enabled: " + configManager.isQueueEnabled());
 

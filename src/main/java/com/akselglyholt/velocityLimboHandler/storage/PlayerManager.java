@@ -35,6 +35,10 @@ public class PlayerManager {
         this.playerData = new ConcurrentHashMap<>();
         this.connectingPlayers = new ConcurrentHashMap<>();
 
+        reloadMessages();
+    }
+
+    public void reloadMessages() {
         queuePositionMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("queuePositionJoin"));
     }
 
@@ -196,6 +200,20 @@ public class PlayerManager {
                 .getPlayer(playerId)
                 .map(player -> !player.isActive())
                 .orElse(true));
+    }
+
+    public int getQueuedServerCount() {
+        pruneInactivePlayers();
+        return (int) reconnectQueues.values().stream()
+                .filter(queue -> !queue.isEmpty())
+                .count();
+    }
+
+    public int getQueuedPlayerCount() {
+        pruneInactivePlayers();
+        return reconnectQueues.values().stream()
+                .mapToInt(Queue::size)
+                .sum();
     }
 
     /**
