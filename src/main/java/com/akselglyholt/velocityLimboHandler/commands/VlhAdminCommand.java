@@ -97,7 +97,8 @@ public class VlhAdminCommand implements SimpleCommand {
         try {
             configManager.load();
             VelocityLimboHandler.getPlayerManager().reloadMessages();
-            send(source, "<green>✔ Reload complete.</green> <gray>Configuration and message files were refreshed.</gray>");
+            VelocityLimboHandler.getInstance().reloadTasks();
+            send(source, "<green>✔ Reload complete.</green> <gray>Configuration, messages, and task schedules were refreshed.</gray>");
         } catch (IOException exception) {
             send(source, "<red>✖ Reload failed.</red> <gray>Could not reload configuration. Check console for details.</gray>");
             VelocityLimboHandler.getLogger().severe("Failed to reload configuration: " + exception.getMessage());
