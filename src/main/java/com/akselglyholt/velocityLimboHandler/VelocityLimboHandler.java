@@ -3,6 +3,7 @@ package com.akselglyholt.velocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlockRule;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
+import com.akselglyholt.velocityLimboHandler.commands.VlhAdminCommand;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
@@ -22,6 +23,7 @@ import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.velocitypowered.api.scheduler.ScheduledTask;
 import dev.dejvokep.boostedyaml.YamlDocument;
 import org.bstats.charts.SingleLineChart;
 import org.bstats.velocity.Metrics;
@@ -49,6 +51,8 @@ public class VelocityLimboHandler {
 
     private ConfigManager configManager;
     private ReconnectHandler reconnectHandler;
+    private ScheduledTask reconnectionTask;
+    private ScheduledTask queueNotifierTask;
 
     private static boolean maintenancePluginPresent = false;
     private static Object maintenanceAPI = null;
@@ -116,6 +120,11 @@ public class VelocityLimboHandler {
         eventManger.register(this, new ConnectionListener());
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker));
 
+        proxyServer.getCommandManager().register(
+                proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(),
+                new VlhAdminCommand()
+        );
+
         getLogger().info("Queue Enabled: " + configManager.isQueueEnabled());
 
         // Disabled commands
@@ -124,14 +133,37 @@ public class VelocityLimboHandler {
             commandBlocker.blockCommand(cmd, CommandBlockRule.onServer(limboName));
         }
 
-        // Schedule the reconnection task
-        proxyServer.getScheduler().buildTask(this, 
-            new ReconnectionTask(proxyServer, limboServer, playerManager, authManager, configManager, reconnectHandler)
+        reloadTasks();
+    }
+
+    public synchronized void reloadTasks() {
+        if (reconnectionTask != null) {
+            reconnectionTask.cancel();
+            reconnectionTask = null;
+        }
+
+        if (queueNotifierTask != null) {
+            queueNotifierTask.cancel();
+            queueNotifierTask = null;
+        }
+
+        String limboName = configManager.getLimboName();
+        String directConnectName = configManager.getDirectConnectServerName();
+
+        limboServer = Utility.getServerByName(limboName);
+        directConnectServer = Utility.getServerByName(directConnectName);
+
+        if (limboServer == null || directConnectServer == null) {
+            logger.warning("Skipping task scheduling: limbo or direct connect server is missing.");
+            return;
+        }
+
+        reconnectionTask = proxyServer.getScheduler().buildTask(this,
+                new ReconnectionTask(proxyServer, limboServer, playerManager, authManager, configManager, reconnectHandler)
         ).repeat(configManager.getTaskInterval(), TimeUnit.MILLISECONDS).schedule();
 
-        // Schedule queue position notifier
-        proxyServer.getScheduler().buildTask(this, 
-            new QueueNotifierTask(limboServer, playerManager, configManager)
+        queueNotifierTask = proxyServer.getScheduler().buildTask(this,
+                new QueueNotifierTask(limboServer, playerManager, configManager)
         ).repeat(configManager.getQueueNotifyInterval(), TimeUnit.SECONDS).schedule();
     }
 

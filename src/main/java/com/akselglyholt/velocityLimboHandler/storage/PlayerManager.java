@@ -8,6 +8,9 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import dev.dejvokep.boostedyaml.route.Route;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
@@ -15,6 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class PlayerManager {
+    public record QueuedPlayer(UUID uuid, String name) {}
+
     private final Map<UUID, String> playerData;
     private final Map<UUID, Boolean> connectingPlayers;
     private final Map<String, Queue<UUID>> reconnectQueues = new ConcurrentHashMap<>();
@@ -35,6 +40,10 @@ public class PlayerManager {
         this.playerData = new ConcurrentHashMap<>();
         this.connectingPlayers = new ConcurrentHashMap<>();
 
+        reloadMessages();
+    }
+
+    public void reloadMessages() {
         queuePositionMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("queuePositionJoin"));
     }
 
@@ -73,9 +82,7 @@ public class PlayerManager {
     public void removePlayer(Player player) {
         UUID playerId = player.getUniqueId();
         removePlayerFromQueue(player);
-        this.playerData.remove(playerId);
-        this.connectingPlayers.remove(playerId);
-        this.playerConnectionIssues.remove(playerId);
+        removePlayerState(playerId);
         VelocityLimboHandler.getReconnectBlocker().unblock(playerId);
     }
 
@@ -125,9 +132,7 @@ public class PlayerManager {
             }
 
             queue.poll();
-            playerData.remove(queuedPlayerId);
-            connectingPlayers.remove(queuedPlayerId);
-            playerConnectionIssues.remove(queuedPlayerId);
+            removePlayerState(queuedPlayerId);
         }
 
         return null;
@@ -198,6 +203,55 @@ public class PlayerManager {
                 .orElse(true));
     }
 
+    public int getQueuedServerCount() {
+        pruneInactivePlayers();
+        return (int) reconnectQueues.values().stream()
+                .filter(queue -> !queue.isEmpty())
+                .count();
+    }
+
+    public int getQueuedPlayerCount() {
+        pruneInactivePlayers();
+        return reconnectQueues.values().stream()
+                .mapToInt(Queue::size)
+                .sum();
+    }
+
+    public Map<String, Integer> getQueuedServerCounts() {
+        pruneInactivePlayers();
+
+        Map<String, Integer> queueCounts = new LinkedHashMap<>();
+        reconnectQueues.forEach((serverName, queue) -> {
+            if (!queue.isEmpty()) {
+                queueCounts.put(serverName, queue.size());
+            }
+        });
+
+        return queueCounts;
+    }
+
+    public List<QueuedPlayer> getQueueForServer(String serverName) {
+        Queue<UUID> queue = reconnectQueues.get(serverName);
+        if (queue == null || queue.isEmpty()) {
+            return List.of();
+        }
+
+        List<QueuedPlayer> queuedPlayers = new ArrayList<>();
+
+        for (UUID queuedPlayerId : queue) {
+            Player queuedPlayer = VelocityLimboHandler.getProxyServer().getPlayer(queuedPlayerId).orElse(null);
+            if (queuedPlayer != null && queuedPlayer.isActive()) {
+                queuedPlayers.add(new QueuedPlayer(queuedPlayerId, queuedPlayer.getUsername()));
+                continue;
+            }
+
+            queue.remove(queuedPlayerId);
+            removePlayerState(queuedPlayerId);
+        }
+
+        return queuedPlayers;
+    }
+
     /**
      * @param server the server of which you need to find the first whitelisted/permission allow player
      * @return Player object
@@ -240,5 +294,11 @@ public class PlayerManager {
         } else {
             this.connectingPlayers.remove(playerId);
         }
+    }
+
+    private void removePlayerState(UUID playerId) {
+        playerData.remove(playerId);
+        connectingPlayers.remove(playerId);
+        playerConnectionIssues.remove(playerId);
     }
 }
