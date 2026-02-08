@@ -19,6 +19,9 @@ public class VlhAdminCommand implements SimpleCommand {
     private static final String RELOAD_PERMISSION = "vlh.admin.reload";
     private static final String STATUS_PERMISSION = "vlh.admin.status";
 
+    private static final String PREFIX = "<dark_gray>[</dark_gray><aqua>VLH</aqua><dark_gray>]</dark_gray> ";
+    private static final String BORDER = "<dark_gray><strikethrough>------------------------------</strikethrough></dark_gray>";
+
     private final MiniMessage miniMessage;
 
     public VlhAdminCommand() {
@@ -30,7 +33,7 @@ public class VlhAdminCommand implements SimpleCommand {
         CommandSource source = invocation.source();
 
         if (!source.hasPermission(ADMIN_PERMISSION)) {
-            source.sendMessage(miniMessage.deserialize("<red>You do not have permission to use this command.</red>"));
+            send(source, "<red>You do not have permission to use this command.</red>");
             return;
         }
 
@@ -71,7 +74,7 @@ public class VlhAdminCommand implements SimpleCommand {
 
     private void handleReload(CommandSource source) {
         if (!source.hasPermission(RELOAD_PERMISSION)) {
-            source.sendMessage(miniMessage.deserialize("<red>You do not have permission to reload VelocityLimboHandler.</red>"));
+            send(source, "<red>You do not have permission to reload VelocityLimboHandler.</red>");
             return;
         }
 
@@ -80,35 +83,47 @@ public class VlhAdminCommand implements SimpleCommand {
         try {
             configManager.load();
             VelocityLimboHandler.getPlayerManager().reloadMessages();
-            source.sendMessage(miniMessage.deserialize("<green>VelocityLimboHandler configuration and messages reloaded.</green>"));
+            send(source, "<green>✔ Reload complete.</green> <gray>Configuration and message files were refreshed.</gray>");
         } catch (IOException exception) {
-            source.sendMessage(miniMessage.deserialize("<red>Failed to reload configuration. Check console for details.</red>"));
+            send(source, "<red>✖ Reload failed.</red> <gray>Could not reload configuration. Check console for details.</gray>");
             VelocityLimboHandler.getLogger().severe("Failed to reload configuration: " + exception.getMessage());
         }
     }
 
     private void handleStatus(CommandSource source) {
         if (!source.hasPermission(STATUS_PERMISSION)) {
-            source.sendMessage(miniMessage.deserialize("<red>You do not have permission to view status.</red>"));
+            send(source, "<red>You do not have permission to view status.</red>");
             return;
         }
 
         PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
         RegisteredServer limboServer = VelocityLimboHandler.getLimboServer();
 
-        String limboName = limboServer != null ? limboServer.getServerInfo().getName() : "Not configured";
+        String limboName = limboServer != null ? "<white>" + limboServer.getServerInfo().getName() + "</white>" : "<red>Not configured</red>";
         String queueEnabled = VelocityLimboHandler.isQueueEnabled() ? "<green>Enabled</green>" : "<red>Disabled</red>";
         int queuedServers = playerManager.getQueuedServerCount();
         int queuedPlayers = playerManager.getQueuedPlayerCount();
 
-        source.sendMessage(miniMessage.deserialize("<gray>----- <aqua>VelocityLimboHandler Status</aqua> -----</gray>"));
-        source.sendMessage(miniMessage.deserialize("<yellow>Limbo server:</yellow> <white>" + limboName + "</white>"));
-        source.sendMessage(miniMessage.deserialize("<yellow>Queue:</yellow> " + queueEnabled));
-        source.sendMessage(miniMessage.deserialize("<yellow>Queued servers:</yellow> <white>" + queuedServers + "</white>"));
-        source.sendMessage(miniMessage.deserialize("<yellow>Queued players:</yellow> <white>" + queuedPlayers + "</white>"));
+        source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
+        send(source, "<gradient:#00D4FF:#7AF7C5><bold>Velocity Limbo Handler Status</bold></gradient>");
+        send(source, "<gray>•</gray> <yellow>Limbo Server:</yellow> " + limboName);
+        send(source, "<gray>•</gray> <yellow>Queue System:</yellow> " + queueEnabled);
+        send(source, "<gray>•</gray> <yellow>Queued Servers:</yellow> <white>" + queuedServers + "</white>");
+        send(source, "<gray>•</gray> <yellow>Queued Players:</yellow> <white>" + queuedPlayers + "</white>");
+        source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
     }
 
     private void sendUsage(CommandSource source) {
-        source.sendMessage(miniMessage.deserialize("<yellow>Usage:</yellow> <white>/vlh &lt;reload|status&gt;</white>"));
+        source.sendMessage(miniMessage.deserialize(PREFIX + "<yellow>Usage:</yellow> <white>/vlh &lt;reload|status&gt;</white>"));
+        source.sendMessage(miniMessage.deserialize(
+                PREFIX + "<gray>Commands:</gray> "
+                        + "<aqua><hover:show_text:'<gray>Reload VLH configuration and messages</gray>'><click:run_command:'/vlh reload'>reload</click></hover></aqua>"
+                        + "<gray> • </gray>"
+                        + "<aqua><hover:show_text:'<gray>View plugin runtime status</gray>'><click:run_command:'/vlh status'>status</click></hover></aqua>"
+        ));
+    }
+
+    private void send(CommandSource source, String body) {
+        source.sendMessage(miniMessage.deserialize(PREFIX + body));
     }
 }
