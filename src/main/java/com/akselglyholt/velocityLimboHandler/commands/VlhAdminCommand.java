@@ -265,7 +265,7 @@ public class VlhAdminCommand implements SimpleCommand {
     }
 
     private void sendUsage(CommandSource source) {
-        source.sendMessage(miniMessage.deserialize(PREFIX + "<yellow>Usage:</yellow> <white>/vlh &lt;reload|status|queue [server] [page]&gt;</white>"));
+        source.sendMessage(miniMessage.deserialize(PREFIX + "<yellow>Usage:</yellow> <white>/vlh reload | status | queue [server] [page]</white>"));
         source.sendMessage(miniMessage.deserialize(
                 PREFIX + "<gray>Commands:</gray> "
                         + "<aqua><hover:show_text:'<gray>Reload VLH configuration and messages</gray>'><click:run_command:'/vlh reload'>reload</click></hover></aqua>"
