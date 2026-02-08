@@ -133,18 +133,21 @@ public class VlhAdminCommand implements SimpleCommand {
             return;
         }
 
+        // /vlh queue
         if (arguments.length == 1) {
             showQueueOverview(source, 1);
             return;
         }
 
-        String secondArg = arguments[1];
-        if (isPositiveInteger(secondArg)) {
-            showQueueOverview(source, Integer.parseInt(secondArg));
+        // /vlh queue [server] [page]
+        // Compatibility: /vlh queue [page] still works when first arg is numeric.
+        String serverOrPage = arguments[1];
+        if (isPositiveInteger(serverOrPage)) {
+            showQueueOverview(source, Integer.parseInt(serverOrPage));
             return;
         }
 
-        String serverName = secondArg;
+        String serverName = serverOrPage;
         int page = arguments.length >= 3 ? parsePositiveInteger(arguments[2], 1) : 1;
         showServerQueue(source, serverName, page);
     }
@@ -230,7 +233,7 @@ public class VlhAdminCommand implements SimpleCommand {
         send(source,
                 previous
                         + " <dark_gray>|</dark_gray> "
-                        + "<gray>Page <white>" + currentPage + "</white>/<white>" + totalPages + "</white></gray>"
+                        + "<gray>Page <white>" + currentPage + "</white> <gray>of</gray> <white>" + totalPages + "</white></gray>"
                         + " <dark_gray>|</dark_gray> "
                         + next);
     }
@@ -261,29 +264,15 @@ public class VlhAdminCommand implements SimpleCommand {
     }
 
     private void sendUsage(CommandSource source) {
-        source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
-        send(source, "<dark_gray>---</dark_gray> <aqua><bold>VelocityLimboHandler Help</bold></aqua> <dark_gray>---</dark_gray>");
-
-        send(source,
-                "<click:run_command:'/vlh reload'><hover:show_text:'<gray>Usage: <white>/vlh reload</white>\\nPermission: <white>"
-                        + RELOAD_PERMISSION
-                        + "</white>\\n<yellow>Click to run</yellow>'><yellow>/vlh reload</yellow></hover></click>"
-                        + " <gray>» Reload config & messages</gray>");
-
-        send(source,
-                "<click:run_command:'/vlh status'><hover:show_text:'<gray>Usage: <white>/vlh status</white>\\nPermission: <white>"
-                        + STATUS_PERMISSION
-                        + "</white>\\n<yellow>Click to run</yellow>'><yellow>/vlh status</yellow></hover></click>"
-                        + " <gray>» View general plugin status</gray>");
-
-        send(source,
-                "<click:run_command:'/vlh queue'><hover:show_text:'<gray>Usage: <white>/vlh queue [server] [page]</white>\\nPermission: <white>"
-                        + QUEUE_PERMISSION
-                        + "</white>\\n<yellow>Click to run</yellow>'><yellow>/vlh queue [server]</yellow></hover></click>"
-                        + " <gray>» Inspect reconnect queues</gray>");
-
-        send(source, "<dark_gray>Tip:</dark_gray> <gray>You can also run <yellow>/vlh queue [page]</yellow> for overview pagination.</gray>");
-        source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
+        source.sendMessage(miniMessage.deserialize(PREFIX + "<yellow>Usage:</yellow> <white>/vlh &lt;reload|status|queue [server] [page]&gt;</white>"));
+        source.sendMessage(miniMessage.deserialize(
+                PREFIX + "<gray>Commands:</gray> "
+                        + "<aqua><hover:show_text:'<gray>Reload VLH configuration and messages</gray>'><click:run_command:'/vlh reload'>reload</click></hover></aqua>"
+                        + "<gray> • </gray>"
+                        + "<aqua><hover:show_text:'<gray>View plugin runtime status</gray>'><click:run_command:'/vlh status'>status</click></hover></aqua>"
+                        + "<gray> • </gray>"
+                        + "<aqua><hover:show_text:'<gray>Show queue status (supports pagination)</gray>'><click:run_command:'/vlh queue'>queue</click></hover></aqua>"
+        ));
     }
 
     private void send(CommandSource source, String body) {
