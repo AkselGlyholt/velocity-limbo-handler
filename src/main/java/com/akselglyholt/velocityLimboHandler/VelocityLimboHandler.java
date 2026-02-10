@@ -18,6 +18,7 @@ import com.google.inject.Inject;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
@@ -25,9 +26,13 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import dev.dejvokep.boostedyaml.YamlDocument;
+import dev.faststats.core.ErrorTracker;
+import dev.faststats.core.chart.Chart;
+import dev.faststats.velocity.VelocityMetrics;
 import org.bstats.charts.SingleLineChart;
 import org.bstats.velocity.Metrics;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -58,12 +63,19 @@ public class VelocityLimboHandler {
     private static Object maintenanceAPI = null;
 
     private final Metrics.Factory metricsFactory;
+    private final VelocityMetrics.Factory faststatsFactory;
+
+    private @Nullable Metrics bstatsMetrics = null;
+    private @Nullable dev.faststats.core.Metrics faststatsMetrics = null;
+
+    public static final ErrorTracker errorTracker = ErrorTracker.contextAware();
 
     @Inject
-    public VelocityLimboHandler(ProxyServer server, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
+    public VelocityLimboHandler(ProxyServer server, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance, VelocityMetrics.Factory faststatsFactoryInstance) {
         proxyServer = server;
         instance = this;
         metricsFactory = metricsFactoryInstance;
+        faststatsFactory = faststatsFactoryInstance;
 
         // Initialize ConfigManager
         configManager = new ConfigManager(dataDirectory, logger);
@@ -87,10 +99,22 @@ public class VelocityLimboHandler {
     public void onInitialize(ProxyInitializeEvent event) {
         // Initialize Metrics
         int pluginId = 26682;
-        Metrics metrics = metricsFactory.make(this, pluginId);
+        bstatsMetrics = metricsFactory.make(this, pluginId);
+        faststatsMetrics = faststatsFactory
+                .addChart(Chart.number("players_in_limbo", new Callable<Number>() {
+                    @Override
+                    public Number call() {
+                        return limboServer != null ? limboServer.getPlayersConnected().size() : 0;
+                    }
+                }))
+
+                .errorTracker(errorTracker)
+
+                .token("3b04f50381455d60d4d8ad8b7b073b33").create(this);
+
 
         // Metric for players inside the limbo
-        metrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
+        bstatsMetrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
             @Override
             public Integer call() {
                 return limboServer != null ? limboServer.getPlayersConnected().size() : 0;
@@ -120,10 +144,7 @@ public class VelocityLimboHandler {
         eventManger.register(this, new ConnectionListener());
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker));
 
-        proxyServer.getCommandManager().register(
-                proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(),
-                new VlhAdminCommand()
-        );
+        proxyServer.getCommandManager().register(proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(), new VlhAdminCommand());
 
         getLogger().info("Queue Enabled: " + configManager.isQueueEnabled());
 
@@ -134,6 +155,12 @@ public class VelocityLimboHandler {
         }
 
         reloadTasks();
+    }
+
+    @Subscribe
+    public void onShutdown(ProxyShutdownEvent event) {
+        if (bstatsMetrics != null) bstatsMetrics.shutdown();
+        if (faststatsMetrics != null) faststatsMetrics.shutdown();
     }
 
     public synchronized void reloadTasks() {
@@ -158,13 +185,9 @@ public class VelocityLimboHandler {
             return;
         }
 
-        reconnectionTask = proxyServer.getScheduler().buildTask(this,
-                new ReconnectionTask(proxyServer, limboServer, playerManager, authManager, configManager, reconnectHandler)
-        ).repeat(configManager.getTaskInterval(), TimeUnit.MILLISECONDS).schedule();
+        reconnectionTask = proxyServer.getScheduler().buildTask(this, new ReconnectionTask(proxyServer, limboServer, playerManager, authManager, configManager, reconnectHandler)).repeat(configManager.getTaskInterval(), TimeUnit.MILLISECONDS).schedule();
 
-        queueNotifierTask = proxyServer.getScheduler().buildTask(this,
-                new QueueNotifierTask(limboServer, playerManager, configManager)
-        ).repeat(configManager.getQueueNotifyInterval(), TimeUnit.SECONDS).schedule();
+        queueNotifierTask = proxyServer.getScheduler().buildTask(this, new QueueNotifierTask(limboServer, playerManager, configManager)).repeat(configManager.getQueueNotifyInterval(), TimeUnit.SECONDS).schedule();
     }
 
     private void initializeMaintenanceIntegration() {
@@ -241,5 +264,9 @@ public class VelocityLimboHandler {
 
     public static ReconnectBlocker getReconnectBlocker() {
         return reconnectBlocker;
+    }
+
+    public static ErrorTracker getErrorTracker() {
+        return errorTracker;
     }
 }
