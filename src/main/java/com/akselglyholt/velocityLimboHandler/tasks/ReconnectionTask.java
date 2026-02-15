@@ -10,6 +10,8 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 public class ReconnectionTask implements Runnable {
     private final ProxyServer proxyServer;
@@ -39,13 +41,12 @@ public class ReconnectionTask implements Runnable {
         playerManager.pruneInactivePlayers();
 
         // Loop through all servers, if queue is enabled
+        Map<String, Boolean> maintenanceCache = new HashMap<>();
+
         if (configManager.isQueueEnabled()) {
             for (RegisteredServer server : proxyServer.getAllServers()) {
-                // Queue mode – get the next player from the queue
-                if (!playerManager.hasQueuedPlayers(server)) continue;
-
                 // Check if the server is in Maintenance mode
-                if (Utility.isServerInMaintenance(server.getServerInfo().getName())) {
+                if (isServerInMaintenance(server, maintenanceCache)) {
                     // Is in Maintenance mode, so find first player in queue that can join
                     Player whitelistedPlayer = PlayerManager.findFirstMaintenanceAllowedPlayer(server);
 
@@ -55,6 +56,10 @@ public class ReconnectionTask implements Runnable {
                 } else {
                     // Is not in Maintenance mode, so carry on with normal queue.
                     Player nextPlayer = playerManager.getNextQueuedPlayer(server);
+                    if (nextPlayer == null) {
+                        continue;
+                    }
+
                     reconnectHandler.reconnectPlayer(nextPlayer);
                 }
             }
@@ -64,7 +69,7 @@ public class ReconnectionTask implements Runnable {
                     // Check if the server is in maintenance mode
                     RegisteredServer previousServer = playerManager.getPreviousServer(player);
 
-                    if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
+                    if (isServerInMaintenance(previousServer, maintenanceCache)) {
                         // Continue only if player does NOT have a maintenance bypass/whitelist entry
                         boolean canBypassMaintenance = player.hasPermission("maintenance.admin")
                                 || player.hasPermission("maintenance.bypass")
@@ -83,5 +88,10 @@ public class ReconnectionTask implements Runnable {
                 }
             }
         }
+    }
+
+    private boolean isServerInMaintenance(RegisteredServer server, Map<String, Boolean> maintenanceCache) {
+        String serverName = server.getServerInfo().getName();
+        return maintenanceCache.computeIfAbsent(serverName, Utility::isServerInMaintenance);
     }
 }
