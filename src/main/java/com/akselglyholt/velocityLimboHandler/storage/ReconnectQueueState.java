@@ -4,19 +4,21 @@ import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 final class ReconnectQueueState {
+    private static final long POSITION_CACHE_TTL_NANOS = TimeUnit.SECONDS.toNanos(1);
+
     private final Map<String, ServerQueue> reconnectQueues = new ConcurrentHashMap<>();
+    private final Map<String, QueuePositionCacheEntry> queuePositionCache = new ConcurrentHashMap<>();
     private final Consumer<UUID> staleEntryRemover;
     private final Function<UUID, Player> activePlayerResolver;
 
@@ -31,26 +33,31 @@ final class ReconnectQueueState {
 
         ServerQueue serverQueue = getOrCreateServerQueue(serverName);
         serverQueue.enqueue(playerId, getTier(player, serverName));
+        invalidatePositionCache(serverName);
     }
 
     void removePlayer(UUID playerId) {
-        reconnectQueues.values().forEach(serverQueue -> serverQueue.remove(playerId));
+        reconnectQueues.forEach((serverName, serverQueue) -> {
+            if (serverQueue.remove(playerId)) {
+                invalidatePositionCache(serverName);
+            }
+        });
     }
 
     Player getNextQueuedPlayer(RegisteredServer server) {
-        ServerQueue serverQueue = getServerQueue(server.getServerInfo().getName());
+        String serverName = server.getServerInfo().getName();
+        ServerQueue serverQueue = getServerQueue(serverName);
         if (serverQueue == null) {
             return null;
         }
 
-        for (Queue<UUID> queue : serverQueue.orderedQueues()) {
-            Player nextPlayer = getNextActiveFromQueue(queue);
-            if (nextPlayer != null) {
-                return nextPlayer;
-            }
+        long beforeVersion = serverQueue.version();
+        Player nextPlayer = serverQueue.getNextActivePlayer(this::getActivePlayer, staleEntryRemover);
+        if (serverQueue.version() != beforeVersion) {
+            invalidatePositionCache(serverName);
         }
 
-        return null;
+        return nextPlayer;
     }
 
     boolean hasQueuedPlayers(RegisteredServer server) {
@@ -63,25 +70,15 @@ final class ReconnectQueueState {
             return -1;
         }
 
-        int position = 1;
-        for (Queue<UUID> queue : serverQueue.orderedQueues()) {
-            QueueScanResult result = scanQueueForPosition(queue, targetId, position);
-            if (result.foundPosition() != -1) {
-                return result.foundPosition();
-            }
-
-            position = result.nextPosition();
-        }
-
-        return -1;
+        return getOrBuildQueuePositions(serverName, serverQueue).getOrDefault(targetId, -1);
     }
 
     void pruneInactivePlayers() {
-        for (ServerQueue serverQueue : reconnectQueues.values()) {
-            for (Queue<UUID> queue : serverQueue.orderedQueues()) {
-                pruneInactiveFromQueue(queue);
+        reconnectQueues.forEach((serverName, serverQueue) -> {
+            if (serverQueue.pruneInactivePlayers(this::getActivePlayer, staleEntryRemover)) {
+                invalidatePositionCache(serverName);
             }
-        }
+        });
     }
 
     int getQueuedServerCount() {
@@ -114,47 +111,36 @@ final class ReconnectQueueState {
             return List.of();
         }
 
-        List<PlayerManager.QueuedPlayer> queuedPlayers = new ArrayList<>();
-        for (Queue<UUID> queue : serverQueue.orderedQueues()) {
-            appendActivePlayers(queue, queuedPlayers);
+        long beforeVersion = serverQueue.version();
+        List<PlayerManager.QueuedPlayer> queuedPlayers = serverQueue.getActiveQueuedPlayers(this::getActivePlayer, staleEntryRemover);
+        if (serverQueue.version() != beforeVersion) {
+            invalidatePositionCache(serverName);
         }
 
         return queuedPlayers;
     }
 
     Player findFirstMaintenanceAllowedPlayer(RegisteredServer server) {
-        ServerQueue serverQueue = getServerQueue(server.getServerInfo().getName());
+        String serverName = server.getServerInfo().getName();
+        ServerQueue serverQueue = getServerQueue(serverName);
         if (serverQueue == null) {
             return null;
         }
 
-        for (Queue<UUID> queue : serverQueue.orderedQueues()) {
-            Player maintenanceAllowed = findFirstMaintenanceAllowedFromQueue(queue, server);
-            if (maintenanceAllowed != null) {
-                return maintenanceAllowed;
-            }
+        long beforeVersion = serverQueue.version();
+        Player maintenanceAllowed = serverQueue.findFirstActiveMatching(
+                this::getActivePlayer,
+                staleEntryRemover,
+                player -> player.hasPermission("maintenance.admin")
+                        || player.hasPermission("maintenance.bypass")
+                        || player.hasPermission("maintenance.singleserver.bypass." + serverName)
+                        || Utility.playerMaintenanceWhitelisted(player)
+        );
+        if (serverQueue.version() != beforeVersion) {
+            invalidatePositionCache(serverName);
         }
 
-        return null;
-    }
-
-    private Player getNextActiveFromQueue(Queue<UUID> queue) {
-        while (!queue.isEmpty()) {
-            UUID queuedPlayerId = queue.peek();
-            if (queuedPlayerId == null) {
-                return null;
-            }
-
-            Player queuedPlayer = getActivePlayer(queuedPlayerId);
-            if (queuedPlayer != null) {
-                return queuedPlayer;
-            }
-
-            queue.poll();
-            staleEntryRemover.accept(queuedPlayerId);
-        }
-
-        return null;
+        return maintenanceAllowed;
     }
 
     private QueueTier getTier(Player player, String serverName) {
@@ -181,83 +167,33 @@ final class ReconnectQueueState {
         return reconnectQueues.computeIfAbsent(serverName, key -> new ServerQueue());
     }
 
-    private void pruneInactiveFromQueue(Queue<UUID> queue) {
-        queue.removeIf(playerId -> getActivePlayer(playerId) == null);
-    }
-
-    private QueueScanResult scanQueueForPosition(Queue<UUID> queue, UUID targetId, int startPosition) {
-        int position = startPosition;
-        List<UUID> staleEntries = new ArrayList<>();
-
-        for (UUID queuedPlayerId : queue) {
-            Player queuedPlayer = getActivePlayer(queuedPlayerId);
-            if (queuedPlayer == null) {
-                staleEntries.add(queuedPlayerId);
-                continue;
-            }
-
-            if (queuedPlayerId.equals(targetId)) {
-                removeStaleEntries(queue, staleEntries);
-                return new QueueScanResult(position, position);
-            }
-
-            position++;
-        }
-
-        removeStaleEntries(queue, staleEntries);
-        return new QueueScanResult(position, -1);
-    }
-
-    private void appendActivePlayers(Queue<UUID> queue, List<PlayerManager.QueuedPlayer> queuedPlayers) {
-        List<UUID> staleEntries = new ArrayList<>();
-
-        for (UUID queuedPlayerId : queue) {
-            Player queuedPlayer = getActivePlayer(queuedPlayerId);
-            if (queuedPlayer != null) {
-                queuedPlayers.add(new PlayerManager.QueuedPlayer(queuedPlayerId, queuedPlayer.getUsername()));
-                continue;
-            }
-
-            staleEntries.add(queuedPlayerId);
-        }
-
-        removeStaleEntries(queue, staleEntries);
-    }
-
-    private Player findFirstMaintenanceAllowedFromQueue(Queue<UUID> queue, RegisteredServer server) {
-        List<UUID> staleEntries = new ArrayList<>();
-
-        for (UUID playerId : queue) {
-            Player player = getActivePlayer(playerId);
-            if (player == null) {
-                staleEntries.add(playerId);
-                continue;
-            }
-
-            if (player.hasPermission("maintenance.admin")
-                    || player.hasPermission("maintenance.bypass")
-                    || player.hasPermission("maintenance.singleserver.bypass." + server.getServerInfo().getName())
-                    || Utility.playerMaintenanceWhitelisted(player)) {
-                removeStaleEntries(queue, staleEntries);
-                return player;
-            }
-        }
-
-        removeStaleEntries(queue, staleEntries);
-        return null;
-    }
-
     private Player getActivePlayer(UUID playerId) {
         return activePlayerResolver.apply(playerId);
     }
 
-    private void removeStaleEntries(Queue<UUID> queue, List<UUID> staleEntries) {
-        staleEntries.forEach(staleId -> {
-            queue.remove(staleId);
-            staleEntryRemover.accept(staleId);
-        });
+    private Map<UUID, Integer> getOrBuildQueuePositions(String serverName, ServerQueue serverQueue) {
+        QueuePositionCacheEntry cached = queuePositionCache.get(serverName);
+        long now = System.nanoTime();
+        long version = serverQueue.version();
+
+        if (cached != null && cached.version() == version && now < cached.expiresAtNanos()) {
+            return cached.positions();
+        }
+
+        Map<UUID, Integer> positions = serverQueue.buildPositionMap(this::getActivePlayer, staleEntryRemover);
+        QueuePositionCacheEntry fresh = new QueuePositionCacheEntry(
+                serverQueue.version(),
+                now + POSITION_CACHE_TTL_NANOS,
+                positions
+        );
+        queuePositionCache.put(serverName, fresh);
+        return positions;
     }
 
-    private record QueueScanResult(int nextPosition, int foundPosition) {
+    private void invalidatePositionCache(String serverName) {
+        queuePositionCache.remove(serverName);
+    }
+
+    private record QueuePositionCacheEntry(long version, long expiresAtNanos, Map<UUID, Integer> positions) {
     }
 }

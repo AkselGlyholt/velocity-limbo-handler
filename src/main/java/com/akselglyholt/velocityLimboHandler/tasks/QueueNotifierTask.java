@@ -53,7 +53,7 @@ public class QueueNotifierTask implements Runnable {
 
             int position = playerManager.getQueuePosition(player);
             if (position == -1) continue;
-            String formatedQueuePositionMsg = MessageFormatter.formatMessage(configManager.getQueuePositionMsg(), player);
+            String formatedQueuePositionMsg = MessageFormatter.formatMessage(configManager.getQueuePositionMsg(), player, position);
 
             player.sendMessage(miniMessage.deserialize(formatedQueuePositionMsg));
         }
