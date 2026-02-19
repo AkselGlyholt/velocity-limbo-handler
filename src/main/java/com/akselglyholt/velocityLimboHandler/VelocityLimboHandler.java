@@ -142,7 +142,7 @@ public class VelocityLimboHandler {
         }
 
         eventManger.register(this, new ConnectionListener());
-        eventManger.register(this, new CommandExecuteEventListener(commandBlocker));
+        eventManger.register(this, new CommandExecuteEventListener(commandBlocker, configManager));
 
         proxyServer.getCommandManager().register(proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(), new VlhAdminCommand());
 

@@ -2,20 +2,22 @@ package com.akselglyholt.velocityLimboHandler.listeners;
 
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlockRule;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
+import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.command.CommandExecuteEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ServerConnection;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.util.Optional;
 
 public class CommandExecuteEventListener {
     private final CommandBlocker commandBlocker;
+    private final ConfigManager configManager;
 
-    public CommandExecuteEventListener(CommandBlocker commandBlocker) {
+    public CommandExecuteEventListener(CommandBlocker commandBlocker, ConfigManager configManager) {
         this.commandBlocker = commandBlocker;
+        this.configManager = configManager;
     }
 
     @Subscribe
@@ -35,8 +37,8 @@ public class CommandExecuteEventListener {
 
             if (rule != null && rule.shouldBlock(player)) {
                 event.setResult(CommandExecuteEvent.CommandResult.denied());
-                player.sendMessage(Component.text("Commands are disabled on this server!")
-                        .color(NamedTextColor.RED));
+                String message = configManager.getCommandBlockedMsg();
+                player.sendMessage(MiniMessage.miniMessage().deserialize(message));
             }
         }
     }
