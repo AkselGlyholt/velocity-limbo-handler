@@ -7,11 +7,7 @@ import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
-import dev.dejvokep.boostedyaml.route.Route;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-
 import java.lang.reflect.Method;
-import java.time.Duration;
 import java.util.logging.Logger;
 
 public class LibreLoginNextHandler implements AuthHandler {
@@ -72,14 +68,6 @@ public class LibreLoginNextHandler implements AuthHandler {
             // 4) provider.getTypes() and pick "authenticated"
             Method getTypes = eventProvider.getClass().getMethod("getTypes");
             Object types = getTypes.invoke(eventProvider);
-
-            // Log available event types (you already saw them)
-            for (var f : types.getClass().getFields()) {
-                try {
-                    Object val = f.get(types);
-                } catch (IllegalAccessException ignored) {
-                }
-            }
 
             // Use the exact field name from your logs
             var authField = types.getClass().getField("authenticated");
@@ -170,12 +158,4 @@ public class LibreLoginNextHandler implements AuthHandler {
 
     }
 
-    private static boolean classPresent(String fqn) {
-        try {
-            Class.forName(fqn, false, LibreLoginNextHandler.class.getClassLoader());
-            return true;
-        } catch (Throwable t) {
-            return false;
-        }
-    }
 }

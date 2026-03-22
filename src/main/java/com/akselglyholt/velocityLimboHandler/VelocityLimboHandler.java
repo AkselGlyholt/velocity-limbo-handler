@@ -26,9 +26,6 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import dev.dejvokep.boostedyaml.YamlDocument;
-import dev.faststats.core.ErrorTracker;
-import dev.faststats.core.chart.Chart;
-import dev.faststats.velocity.VelocityMetrics;
 import org.bstats.charts.SingleLineChart;
 import org.bstats.velocity.Metrics;
 
@@ -63,19 +60,14 @@ public class VelocityLimboHandler {
     private static Object maintenanceAPI = null;
 
     private final Metrics.Factory metricsFactory;
-    private final VelocityMetrics.Factory faststatsFactory;
 
     private @Nullable Metrics bstatsMetrics = null;
-    private @Nullable dev.faststats.core.Metrics faststatsMetrics = null;
-
-    public static final ErrorTracker errorTracker = ErrorTracker.contextAware();
 
     @Inject
-    public VelocityLimboHandler(ProxyServer server, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance, VelocityMetrics.Factory faststatsFactoryInstance) {
+    public VelocityLimboHandler(ProxyServer server, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
         proxyServer = server;
         instance = this;
         metricsFactory = metricsFactoryInstance;
-        faststatsFactory = faststatsFactoryInstance;
 
         // Initialize ConfigManager
         configManager = new ConfigManager(dataDirectory, logger);
@@ -100,18 +92,6 @@ public class VelocityLimboHandler {
         // Initialize Metrics
         int pluginId = 26682;
         bstatsMetrics = metricsFactory.make(this, pluginId);
-        faststatsMetrics = faststatsFactory
-                .addChart(Chart.number("players_in_limbo", new Callable<Number>() {
-                    @Override
-                    public Number call() {
-                        return limboServer != null ? limboServer.getPlayersConnected().size() : 0;
-                    }
-                }))
-
-                .errorTracker(errorTracker)
-
-                .token("3b04f50381455d60d4d8ad8b7b073b33").create(this);
-
 
         // Metric for players inside the limbo
         bstatsMetrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
@@ -160,7 +140,6 @@ public class VelocityLimboHandler {
     @Subscribe
     public void onShutdown(ProxyShutdownEvent event) {
         if (bstatsMetrics != null) bstatsMetrics.shutdown();
-        if (faststatsMetrics != null) faststatsMetrics.shutdown();
     }
 
     public synchronized void reloadTasks() {
@@ -264,9 +243,5 @@ public class VelocityLimboHandler {
 
     public static ReconnectBlocker getReconnectBlocker() {
         return reconnectBlocker;
-    }
-
-    public static ErrorTracker getErrorTracker() {
-        return errorTracker;
     }
 }

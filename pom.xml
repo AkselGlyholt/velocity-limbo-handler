@@ -150,10 +150,6 @@
                                     <shadedPattern>${shade.base}.bstats</shadedPattern>
                                 </relocation>
 
-                                <relocation>
-                                    <pattern>dev.faststats</pattern>
-                                    <shadedPattern>${shade.base}.faststats</shadedPattern>
-                                </relocation>
                             </relocations>
 
                             <transformers>
@@ -309,23 +305,10 @@
         </dependency>
 
         <dependency>
-            <groupId>eu.kennytv.maintenance</groupId>
-            <artifactId>maintenance-api-proxy</artifactId>
-            <version>4.2.1</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
             <groupId>org.bstats</groupId>
             <artifactId>bstats-velocity</artifactId>
             <version>3.0.2</version>
             <scope>compile</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>dev.faststats.metrics</groupId>
-            <artifactId>velocity</artifactId>
-            <version>0.14.0</version>
         </dependency>
 
         <dependency>

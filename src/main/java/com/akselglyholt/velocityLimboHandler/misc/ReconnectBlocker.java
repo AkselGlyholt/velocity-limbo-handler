@@ -1,6 +1,5 @@
 package com.akselglyholt.velocityLimboHandler.misc;
 
-import java.time.Duration;
 import java.util.UUID;
 
 public interface ReconnectBlocker {
