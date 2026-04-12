@@ -27,6 +27,7 @@ public class ConfigManager {
     private String maintenanceModeMsg;
     private String queuePositionMsg;
     private String queuePositionJoinMsg;
+    private String commandBlockedMsg;
 
     private String limboName;
     private String directConnectServerName;
@@ -74,6 +75,7 @@ public class ConfigManager {
         maintenanceModeMsg = messageConfig.getString(Route.from("maintenanceMode"));
         queuePositionMsg = messageConfig.getString(Route.from("queuePosition"));
         queuePositionJoinMsg = messageConfig.getString(Route.from("queuePositionJoin"));
+        commandBlockedMsg = messageConfig.getString(Route.from("commandBlocked"));
 
         limboName = config.getString(Route.from("limbo-name"));
         directConnectServerName = config.getString(Route.from("direct-connect-server"));
@@ -109,6 +111,10 @@ public class ConfigManager {
 
     public String getQueuePositionJoinMsg() {
         return queuePositionJoinMsg;
+    }
+
+    public String getCommandBlockedMsg() {
+        return commandBlockedMsg;
     }
 
     public String getLimboName() {

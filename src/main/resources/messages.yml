@@ -21,3 +21,6 @@ queuePositionJoin: "<yellow>You are in the queue. Position: [queue-position]"
 
 # Welcome messages
 welcomeMessage: "<blue>🌌 You were sent to Limbo.</blue> \n<gray>You will be reconnected when the system allows.</gray>"
+
+# Command blocking
+commandBlocked: "<red>Commands are disabled on this server!</red>"
