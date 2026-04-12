@@ -1,10 +1,14 @@
-file-version: 3
+file-version: 4
 
 # You can change all messages inside this file.
 # Messages use minimessage format: https://docs.advntr.dev/minimessage/index.html
 
 # Messages can include placeholders such as:
+# [player] player username
 # [queue-position] which will display queue position
+# [queue-size] size of the queue
+# [total-limbo] total players in the limbo
+# [queued-server] displays the server that the player is in queue for
 
 # These messages are for errors under reconnection, such as not whitelisted or banned.
 bannedMessage: "<red>⛔ You are banned from that server.</red>"
