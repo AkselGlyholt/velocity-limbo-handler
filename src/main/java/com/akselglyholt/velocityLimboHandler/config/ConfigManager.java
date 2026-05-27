@@ -35,6 +35,7 @@ public class ConfigManager {
     private int queueNotifyInterval;
     private boolean queueEnabled;
     private List<String> disabledCommands;
+    private boolean connectionWarnings;
 
     public ConfigManager(Path dataDirectory, Logger logger) {
         this.dataDirectory = dataDirectory;
@@ -83,6 +84,7 @@ public class ConfigManager {
         queueNotifyInterval = config.getInt(Route.from("queue-notify-interval"));
         queueEnabled = config.getBoolean(Route.from("queue-enabled"), true);
         disabledCommands = config.getStringList("disabled-commands");
+        connectionWarnings = config.getBoolean("connection-warnings", false);
     }
 
     public YamlDocument getConfig() {
@@ -139,5 +141,9 @@ public class ConfigManager {
 
     public List<String> getDisabledCommands() {
         return disabledCommands;
+    }
+
+    public boolean isConnectionWarningsEnabled() {
+        return connectionWarnings;
     }
 }
