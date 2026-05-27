@@ -12,9 +12,12 @@ import com.velocitypowered.api.proxy.server.ServerPing;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.TranslatableComponent;
+import net.kyori.adventure.text.TranslationArgument;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -121,11 +124,27 @@ public class ReconnectHandler {
         return true;
     }
 
+    private Optional<Component> extractBanReason(TranslatableComponent component) {
+        List<TranslationArgument> args = component.arguments();
+        if (args.isEmpty()) return Optional.empty();
+        Component reasonComponent = args.get(0).asComponent();
+        if (reasonComponent instanceof TranslatableComponent) return Optional.empty();
+        String plain = PlainTextComponentSerializer.plainText().serialize(reasonComponent).trim();
+        return plain.isEmpty() ? Optional.empty() : Optional.of(reasonComponent);
+    }
+
     private boolean playerConnectIssue(Player player, Component reason) {
         if (reason instanceof TranslatableComponent translatable) {
             String key = translatable.key();
             if (key.contains("banned")) {
-                player.sendMessage(miniMessage.deserialize(MessageFormatter.formatMessage(configManager.getBannedMsg(), player)));
+                Component message = miniMessage.deserialize(MessageFormatter.formatMessage(configManager.getBannedMsg(), player));
+                Optional<Component> banReason = extractBanReason(translatable);
+                if (banReason.isPresent()) {
+                    message = message.append(Component.newline())
+                            .append(Component.text("Reason: ", NamedTextColor.GRAY))
+                            .append(banReason.get());
+                }
+                player.sendMessage(message);
                 playerManager.addPlayerWithIssue(player, "banned");
                 playerManager.removePlayerFromQueue(player);
                 return true;
