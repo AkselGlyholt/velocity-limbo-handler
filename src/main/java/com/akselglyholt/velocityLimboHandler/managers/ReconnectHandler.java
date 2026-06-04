@@ -10,9 +10,14 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerPing;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.TranslatableComponent;
+import net.kyori.adventure.text.TranslationArgument;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -95,37 +100,22 @@ public class ReconnectHandler {
                         previousServer.getServerInfo().getName(),
                         result.getStatus()));
 
-                if (connectionThrowable != null) {
-                    // Get the error message from throwable
-                    String errorMessage = connectionThrowable.getMessage();
-                    if (errorMessage == null) errorMessage = "";
-
-                    // Also check the result component if available
-                    String reasonFromComponent = "";
-                    if (result.getReasonComponent().isPresent()) {
-                        reasonFromComponent = PlainTextComponentSerializer.plainText().serialize(result.getReasonComponent().get());
+                if (result.getStatus() == ConnectionRequestBuilder.Status.SERVER_DISCONNECTED) {
+                    Optional<Component> reasonOpt = result.getReasonComponent();
+                    if (reasonOpt.isPresent()) {
+                        Component reason = reasonOpt.get();
+                        if (!playerConnectIssue(player, reason)) {
+                            String plainReason = PlainTextComponentSerializer.plainText().serialize(reason);
+                            player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + plainReason + "</red>"));
+                        }
                     }
+                    return;
+                }
 
-                    // Check both the throwable message and the component reason
-                    String combinedErrorMessage = (errorMessage + " " + reasonFromComponent).toLowerCase();
-
-                    // Notify user of their issue, and them to issue list
-                    if (playerConnectIssue(player, combinedErrorMessage)) return;
-
-                    // Handle any other connection errors
-                    player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + (errorMessage.isEmpty() ? reasonFromComponent : errorMessage) + "</red>"));
-                } else {
-                    // Handle case where we have a result but no throwable
-                    Optional<Component> reasonComponent = result.getReasonComponent();
-
-                    if (reasonComponent.isPresent()) {
-                        String reason = PlainTextComponentSerializer.plainText().serialize(reasonComponent.get()).toLowerCase();
-
-                        // Notify user of their issue, and them to issue list
-                        if (playerConnectIssue(player, reason)) return;
-
-                        // Handle any other connection errors
-                        player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + reason + "</red>"));
+                if (connectionThrowable != null) {
+                    String errorMessage = connectionThrowable.getMessage();
+                    if (errorMessage != null && !errorMessage.isEmpty()) {
+                        player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + errorMessage + "</red>"));
                     }
                 }
             }));
@@ -134,29 +124,42 @@ public class ReconnectHandler {
         return true;
     }
 
-    private boolean playerConnectIssue(Player player, String reason) {
-        if (reason.contains("ban") || reason.contains("banned")) {
-            String formattedMsg = MessageFormatter.formatMessage(configManager.getBannedMsg(), player);
+    private Optional<Component> extractBanReason(TranslatableComponent component) {
+        List<TranslationArgument> args = component.arguments();
+        if (args.isEmpty()) return Optional.empty();
+        Component reasonComponent = args.get(0).asComponent();
+        if (reasonComponent instanceof TranslatableComponent) return Optional.empty();
+        String plain = PlainTextComponentSerializer.plainText().serialize(reasonComponent).trim();
+        return plain.isEmpty() ? Optional.empty() : Optional.of(reasonComponent);
+    }
 
-            player.sendMessage(miniMessage.deserialize(formattedMsg));
-
-            // Mark them with an issue instead of kicking
-            playerManager.addPlayerWithIssue(player, "banned");
-
-            // Remove them from the reconnection queue to avoid blocking others
-            playerManager.removePlayerFromQueue(player);
-            return true;
+    private boolean playerConnectIssue(Player player, Component reason) {
+        if (reason instanceof TranslatableComponent translatable) {
+            String key = translatable.key();
+            if (key.contains("banned")) {
+                Component message = miniMessage.deserialize(MessageFormatter.formatMessage(configManager.getBannedMsg(), player));
+                Optional<Component> banReason = extractBanReason(translatable);
+                if (banReason.isPresent()) {
+                    message = message.append(Component.newline())
+                            .append(Component.text("Reason: ", NamedTextColor.GRAY))
+                            .append(banReason.get());
+                }
+                player.sendMessage(message);
+                playerManager.addPlayerWithIssue(player, "banned");
+                playerManager.removePlayerFromQueue(player);
+                return true;
+            }
+            if (key.contains("not_whitelisted")) {
+                player.sendMessage(miniMessage.deserialize(MessageFormatter.formatMessage(configManager.getWhitelistedMsg(), player)));
+                playerManager.addPlayerWithIssue(player, "not_whitelisted");
+                playerManager.removePlayerFromQueue(player);
+                return true;
+            }
         }
 
-        if (reason.contains("whitelist") || reason.contains("not whitelisted")) {
-            String formattedMsg = MessageFormatter.formatMessage(configManager.getWhitelistedMsg(), player);
-
-            player.sendMessage(miniMessage.deserialize(formattedMsg));
-
-            // Mark them with an issue instead of kicking
+        if (reason instanceof TextComponent textComponent && textComponent.content().toLowerCase().contains("whitelist")) {
+            player.sendMessage(miniMessage.deserialize(MessageFormatter.formatMessage(configManager.getWhitelistedMsg(), player)));
             playerManager.addPlayerWithIssue(player, "not_whitelisted");
-
-            // Remove them from the reconnection queue to avoid blocking others
             playerManager.removePlayerFromQueue(player);
             return true;
         }
