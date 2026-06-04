@@ -1,4 +1,4 @@
-file-version: 6
+file-version: 7
 
 # Server configs - These are settings you need to change!
 # The name of the limbo server in your velocity network
@@ -16,3 +16,6 @@ queue-notify-interval: 30 # The time in seconds (Default: 30)
 
 # A list of disabled commands, which will not work inside the Limbo server. Recommended commands are ones that the player can use to transfer server, like /server or /hub
 disabled-commands: ["server", "lobby", "hub"]
+
+# Debug/information
+connection-warnings: false # Should connection failures/warnings be logged (Default: false)

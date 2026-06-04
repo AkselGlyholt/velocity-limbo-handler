@@ -90,10 +90,12 @@ public class ReconnectHandler {
 
                 if (result.getStatus() == ConnectionRequestBuilder.Status.CONNECTION_IN_PROGRESS) return;
 
-                Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s",
-                        player.getUsername(),
-                        previousServer.getServerInfo().getName(),
-                        result.getStatus()));
+                if (configManager.isConnectionWarningsEnabled()) {
+                    Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s",
+                            player.getUsername(),
+                            previousServer.getServerInfo().getName(),
+                            result.getStatus()));
+                }
 
                 if (connectionThrowable != null) {
                     // Get the error message from throwable
