@@ -68,6 +68,12 @@ public class Utility {
         VelocityLimboHandler.getLogger().info(message);
     }
 
+    public static void logDebug(String message) {
+        if (VelocityLimboHandler.getConfigManager().isDebugEnabled()) {
+            VelocityLimboHandler.getLogger().info("[DEBUG] " + message);
+        }
+    }
+
     private static Method getCachedMethod(Map<Class<?>, Method> cache, Class<?> targetClass, String methodName, Class<?>... paramTypes) {
         return cache.computeIfAbsent(targetClass, key -> {
             try {

@@ -47,25 +47,34 @@ public class ReconnectHandler {
         playerManager.setPlayerConnecting(player, true);
 
         // If enabled, check if a server responds to pings before connecting, asynchronously
+        Utility.logDebug(String.format("Pinging %s for %s", previousServer.getServerInfo().getName(), player.getUsername()));
         previousServer.ping().whenComplete((ping, throwable) -> {
             if (throwable != null || ping == null) {
+                Utility.logDebug(String.format("Ping failed for %s (%s) — server likely offline",
+                        previousServer.getServerInfo().getName(),
+                        throwable != null ? throwable.getMessage() : "null ping"));
                 playerManager.setPlayerConnecting(player, false);
                 return; // Server offline
             }
 
-            // Check if the server is full
-            if (ping.getPlayers().isEmpty()) {
-                playerManager.setPlayerConnecting(player, false);
-                return;
-            }
+            // Check if the server is full (skip if the server doesn't report player counts)
+            if (ping.getPlayers().isPresent()) {
+                ServerPing.Players serverPlayers = ping.getPlayers().get();
+                int maxPlayers = serverPlayers.getMax();
+                int onlinePlayers = serverPlayers.getOnline();
 
-            ServerPing.Players serverPlayers = ping.getPlayers().get();
-            int maxPlayers = serverPlayers.getMax();
-            int onlinePlayers = serverPlayers.getOnline();
+                Utility.logDebug(String.format("Ping OK for %s: %d/%d players",
+                        previousServer.getServerInfo().getName(), onlinePlayers, maxPlayers));
 
-            if (maxPlayers <= onlinePlayers) {
-                playerManager.setPlayerConnecting(player, false);
-                return;
+                if (maxPlayers <= onlinePlayers) {
+                    Utility.logDebug(String.format("Skipping reconnect for %s — %s is full (%d/%d)",
+                            player.getUsername(), previousServer.getServerInfo().getName(), onlinePlayers, maxPlayers));
+                    playerManager.setPlayerConnecting(player, false);
+                    return;
+                }
+            } else {
+                Utility.logDebug(String.format("Ping OK for %s: player count not reported (hide-online-players?), proceeding",
+                        previousServer.getServerInfo().getName()));
             }
 
             // Check if maintenance mode is enabled on Backend Server
