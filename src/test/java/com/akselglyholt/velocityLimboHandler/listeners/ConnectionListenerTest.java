@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.listeners;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
+import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
@@ -36,6 +37,7 @@ class ConnectionListenerTest {
     private ReconnectBlocker reconnectBlocker;
     private Logger logger;
     private YamlDocument messageConfig;
+    private ConfigManager configManager;
 
     private ConnectionListener connectionListener;
 
@@ -49,6 +51,7 @@ class ConnectionListenerTest {
         reconnectBlocker = mock(ReconnectBlocker.class);
         logger = mock(Logger.class);
         messageConfig = mock(YamlDocument.class);
+        configManager = mock(ConfigManager.class);
 
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getPlayerManager).thenReturn(playerManager);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getProxyServer).thenReturn(proxyServer);
@@ -57,6 +60,9 @@ class ConnectionListenerTest {
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getReconnectBlocker).thenReturn(reconnectBlocker);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getLogger).thenReturn(logger);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getMessageConfig).thenReturn(messageConfig);
+        mockedVelocityLimboHandler.when(VelocityLimboHandler::getConfigManager).thenReturn(configManager);
+
+        when(configManager.isDebugEnabled()).thenReturn(false);
 
         when(messageConfig.getString(any(Route.class))).thenReturn("Welcome!");
 

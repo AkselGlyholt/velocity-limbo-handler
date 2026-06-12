@@ -36,6 +36,7 @@ public class ConfigManager {
     private boolean queueEnabled;
     private List<String> disabledCommands;
     private boolean connectionWarnings;
+    private boolean debug;
 
     public ConfigManager(Path dataDirectory, Logger logger) {
         this.dataDirectory = dataDirectory;
@@ -85,6 +86,7 @@ public class ConfigManager {
         queueEnabled = config.getBoolean(Route.from("queue-enabled"), true);
         disabledCommands = config.getStringList("disabled-commands");
         connectionWarnings = config.getBoolean("connection-warnings", false);
+        debug = config.getBoolean("debug", false);
     }
 
     public YamlDocument getConfig() {
@@ -145,5 +147,9 @@ public class ConfigManager {
 
     public boolean isConnectionWarningsEnabled() {
         return connectionWarnings;
+    }
+
+    public boolean isDebugEnabled() {
+        return debug;
     }
 }

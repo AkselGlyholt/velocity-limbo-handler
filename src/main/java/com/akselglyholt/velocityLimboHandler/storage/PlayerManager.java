@@ -37,15 +37,23 @@ public class PlayerManager {
     public void addPlayer(Player player, RegisteredServer registeredServer) {
         UUID playerId = player.getUniqueId();
         if (connectionState.isRegistered(playerId)) {
+            Utility.logDebug(String.format(
+                    "Skipping addPlayer for %s — already registered for '%s'",
+                    player.getUsername(),
+                    connectionState.getRegisteredServer(playerId).orElse("unknown")));
             return;
         }
 
         if (isAuthBlocked(player)) {
+            Utility.logDebug(String.format("Skipping addPlayer for %s — auth blocked", player.getUsername()));
             return;
         }
 
         String serverName = registeredServer.getServerInfo().getName();
         connectionState.registerPlayer(playerId, serverName);
+
+        VelocityLimboHandler.getLogger().info(String.format(
+                "%s joined limbo — queued for %s", player.getUsername(), serverName));
 
         Utility.sendWelcomeMessage(player, null);
 

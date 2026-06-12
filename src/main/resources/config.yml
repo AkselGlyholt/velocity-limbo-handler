@@ -1,4 +1,4 @@
-file-version: 7
+file-version: 8
 
 # Server configs - These are settings you need to change!
 # The name of the limbo server in your velocity network
@@ -19,3 +19,4 @@ disabled-commands: ["server", "lobby", "hub"]
 
 # Debug/information
 connection-warnings: false # Should connection failures/warnings be logged (Default: false)
+debug: false # Log detailed info about virtual-host resolution, queue assignment, and ping results (Default: false)
