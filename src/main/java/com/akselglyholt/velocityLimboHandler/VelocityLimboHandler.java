@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 @Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", authors = "Aksel Glyholt", version = VersionInfo.VERSION, dependencies = {
@@ -78,12 +79,12 @@ public class VelocityLimboHandler {
         // Initialize ConfigManager
         configManager = new ConfigManager(dataDirectory, logger);
         try {
-            configManager.load();
+            configManager.load((limboName, directConnectName) ->
+                    server.getServer(limboName).isPresent() && server.getServer(directConnectName).isPresent()
+            );
         } catch (IOException e) {
-            logger.severe("Something went wrong while trying to update/create config: " + e);
-            logger.severe("Plugin will now shut down!");
-            Optional<PluginContainer> container = proxyServer.getPluginManager().getPlugin("velocity-limbo-handler");
-            container.ifPresent(pluginContainer -> pluginContainer.getExecutorService().shutdown());
+            logger.log(Level.SEVERE, "Unable to load VelocityLimboHandler configuration", e);
+            throw new IllegalStateException("VelocityLimboHandler cannot start without a valid configuration", e);
         }
 
         playerManager = new PlayerManager();
@@ -95,22 +96,6 @@ public class VelocityLimboHandler {
 
     @Subscribe
     public void onInitialize(ProxyInitializeEvent event) {
-        // Initialize Metrics
-        int pluginId = 26682;
-        bstatsMetrics = metricsFactory.make(this, pluginId);
-
-        // Metric for players inside the limbo
-        bstatsMetrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
-            @Override
-            public Integer call() {
-                return limboServer != null ? limboServer.getPlayersConnected().size() : 0;
-            }
-        }));
-
-        // Initialize Managers
-        authManager = new AuthManager(this, proxyServer, reconnectBlocker);
-        reconnectHandler = new ReconnectHandler(playerManager, authManager, configManager, logger);
-
         logger.info("Loading Limbo Handler!");
 
         EventManager eventManger = proxyServer.getEventManager();
@@ -121,11 +106,23 @@ public class VelocityLimboHandler {
         limboServer = Utility.getServerByName(limboName);
         directConnectServer = Utility.getServerByName(directConnectName);
 
-        // If either server is null, "self-destruct"
+        // A server can disappear after constructor-time validation if Velocity's registry changes.
         if (limboServer == null || directConnectServer == null) {
-            eventManger.unregisterListeners(this);
             return;
         }
+
+        // Initialize metrics and managers only after all required runtime dependencies exist.
+        int pluginId = 26682;
+        bstatsMetrics = metricsFactory.make(this, pluginId);
+        bstatsMetrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return limboServer.getPlayersConnected().size();
+            }
+        }));
+
+        authManager = new AuthManager(this, proxyServer, reconnectBlocker);
+        reconnectHandler = new ReconnectHandler(playerManager, authManager, configManager, logger);
 
         eventManger.register(this, new ConnectionListener());
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker, configManager));
@@ -135,29 +132,22 @@ public class VelocityLimboHandler {
         getLogger().info("Queue Enabled: " + configManager.isQueueEnabled());
 
         // Disabled commands
-        List<String> disabledCommands = configManager.getDisabledCommands();
-        for (String cmd : disabledCommands) {
-            commandBlocker.blockCommand(cmd, CommandBlockRule.onServer(limboName));
-        }
+        commandBlocker.replaceCommands(configManager.getDisabledCommands(), CommandBlockRule.onServer(limboName));
 
         reloadTasks();
     }
 
     @Subscribe
     public void onShutdown(ProxyShutdownEvent event) {
+        cancelScheduledTasks();
         if (bstatsMetrics != null) bstatsMetrics.shutdown();
+        if (reconnectHandler != null) reconnectHandler.close();
+        if (authManager != null) authManager.close();
+        Utility.clearMaintenanceAdapter();
     }
 
     public synchronized void reloadTasks() {
-        if (reconnectionTask != null) {
-            reconnectionTask.cancel();
-            reconnectionTask = null;
-        }
-
-        if (queueNotifierTask != null) {
-            queueNotifierTask.cancel();
-            queueNotifierTask = null;
-        }
+        cancelScheduledTasks();
 
         String limboName = configManager.getLimboName();
         String directConnectName = configManager.getDirectConnectServerName();
@@ -172,7 +162,31 @@ public class VelocityLimboHandler {
 
         reconnectionTask = proxyServer.getScheduler().buildTask(this, new ReconnectionTask(proxyServer, limboServer, playerManager, authManager, configManager, reconnectHandler)).repeat(configManager.getTaskInterval(), TimeUnit.MILLISECONDS).schedule();
 
-        queueNotifierTask = proxyServer.getScheduler().buildTask(this, new QueueNotifierTask(limboServer, playerManager, configManager)).repeat(configManager.getQueueNotifyInterval(), TimeUnit.SECONDS).schedule();
+        queueNotifierTask = proxyServer.getScheduler()
+                .buildTask(this, new QueueNotifierTask(proxyServer, limboServer, playerManager, configManager))
+                .repeat(1, TimeUnit.SECONDS)
+                .schedule();
+    }
+
+    private synchronized void cancelScheduledTasks() {
+        if (reconnectionTask != null) {
+            reconnectionTask.cancel();
+            reconnectionTask = null;
+        }
+
+        if (queueNotifierTask != null) {
+            queueNotifierTask.cancel();
+            queueNotifierTask = null;
+        }
+    }
+
+    public synchronized void applyReloadedConfiguration() {
+        playerManager.reloadMessages();
+        commandBlocker.replaceCommands(
+                configManager.getDisabledCommands(),
+                CommandBlockRule.onServer(configManager.getLimboName())
+        );
+        reloadTasks();
     }
 
     private void initializeMaintenanceIntegration() {

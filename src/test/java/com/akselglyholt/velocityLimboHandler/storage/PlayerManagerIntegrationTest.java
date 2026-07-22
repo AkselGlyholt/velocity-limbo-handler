@@ -121,6 +121,7 @@ class PlayerManagerIntegrationTest {
         assertEquals(2, playerManager.getQueuedPlayerCount());
 
         when(proxyServer.getPlayer(stale.getUniqueId())).thenReturn(Optional.empty());
+        playerManager.pruneInactivePlayers();
 
         assertEquals(1, playerManager.getQueuedPlayerCount());
         assertEquals(Map.of("survival", 1), playerManager.getQueuedServerCounts());

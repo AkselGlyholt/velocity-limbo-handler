@@ -1,14 +1,19 @@
 package com.akselglyholt.velocityLimboHandler.misc;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
+import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
+import java.util.Locale;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -82,5 +87,23 @@ class UtilityTest {
 
         assertNull(result);
         verify(logger).severe(contains("is invalid"));
+    }
+
+    @Test
+    void welcomeReasonMatchingDoesNotDependOnSystemLocale() {
+        Locale originalLocale = Locale.getDefault();
+        Player player = mock(Player.class);
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+
+            Utility.sendWelcomeMessage(player, "CONNECTION-ISSUE");
+
+            ArgumentCaptor<Component> messageCaptor = ArgumentCaptor.forClass(Component.class);
+            verify(player).sendMessage(messageCaptor.capture());
+            String message = PlainTextComponentSerializer.plainText().serialize(messageCaptor.getValue());
+            assertTrue(message.contains("connection issues"));
+        } finally {
+            Locale.setDefault(originalLocale);
+        }
     }
 }

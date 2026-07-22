@@ -3,6 +3,7 @@ package com.akselglyholt.velocityLimboHandler.auth.handlers;
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.auth.AuthHandler;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
+import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
@@ -24,10 +25,9 @@ public class NLoginHandler implements AuthHandler {
         this.proxy = proxy;
         this.blocker = blocker;
 
-        this.active = proxy.getPluginManager().getPlugin("nlogin").isPresent()
+        boolean detected = proxy.getPluginManager().getPlugin("nlogin").isPresent()
                 || classPresent("com.nickuc.login.api.NLoginAPI");
-
-        if (active) tryHook();
+        this.active = detected && tryHook();
     }
 
     @Override
@@ -47,7 +47,7 @@ public class NLoginHandler implements AuthHandler {
         blocker.block(player.getUniqueId(), "auth");
     }
 
-    private void tryHook() {
+    private boolean tryHook() {
         try {
             logger.info("NLogin plugin detected! Integrating now");
 
@@ -57,7 +57,7 @@ public class NLoginHandler implements AuthHandler {
             proxy.getEventManager().register(VelocityLimboHandler.getInstance(), eventClass, event -> {
                 try {
                     Player player = (Player) getPlayer.invoke(event);
-                    logger.info("Player " + player.getUsername() + " authenticated via NLogin — unblocked.");
+                    Utility.logDebug(() -> "Player " + player.getUsername() + " authenticated via NLogin — unblocked.");
 
                     blocker.unblock(player.getUniqueId());
                 } catch (Exception ex) {
@@ -69,9 +69,10 @@ public class NLoginHandler implements AuthHandler {
             proxy.getEventManager().register(VelocityLimboHandler.getInstance(), ServerPreConnectEvent.class, this::onServerPreConnect);
 
             logger.info("Subscribed to NLogin AuthenticateEvent.");
+            return true;
         } catch (Exception e) {
             logger.warning("Failed to integrate with NLogin: " + e.getMessage());
-            e.printStackTrace();
+            return false;
         }
     }
 

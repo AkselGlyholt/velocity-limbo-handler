@@ -19,6 +19,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 final class ServerQueue {
+    private static final long VERSION_MISMATCH = -1L;
+
     private final LinkedHashSet<UUID> bypass = new LinkedHashSet<>();
     private final LinkedHashSet<UUID> priority = new LinkedHashSet<>();
     private final LinkedHashSet<UUID> normal = new LinkedHashSet<>();
@@ -31,6 +33,8 @@ final class ServerQueue {
         try {
             QueueTier existingTier = tierByPlayer.get(playerId);
             if (existingTier == tier) {
+                // A repeated enqueue can represent a new player lifecycle for the same UUID.
+                version.incrementAndGet();
                 return;
             }
 
@@ -69,202 +73,134 @@ final class ServerQueue {
         Objects.requireNonNull(activePlayerResolver, "activePlayerResolver");
         Objects.requireNonNull(staleEntryRemover, "staleEntryRemover");
 
-        List<UUID> staleEntries = new ArrayList<>();
-        Player nextPlayer = null;
-        boolean mutated = false;
-
-        lock.lock();
-        try {
-            for (LinkedHashSet<UUID> tierSet : orderedTierSets()) {
-                Iterator<UUID> iterator = tierSet.iterator();
-                while (iterator.hasNext()) {
-                    UUID playerId = iterator.next();
-                    Player player = activePlayerResolver.apply(playerId);
-                    if (player != null) {
-                        nextPlayer = player;
-                        break;
-                    }
-
-                    iterator.remove();
-                    tierByPlayer.remove(playerId);
-                    staleEntries.add(playerId);
-                    mutated = true;
-                }
-
-                if (nextPlayer != null) {
-                    break;
-                }
+        while (true) {
+            HeadSnapshot head = snapshotHead();
+            if (head == null) {
+                return null;
             }
 
-            if (mutated) {
-                version.incrementAndGet();
+            Player player = activePlayerResolver.apply(head.playerId());
+            if (player != null) {
+                if (isCurrentHead(head)) {
+                    return player;
+                }
+                continue;
             }
-        } finally {
-            lock.unlock();
+
+            if (removeCurrentHead(head)) {
+                staleEntryRemover.accept(head.playerId());
+            }
         }
-
-        staleEntries.forEach(staleEntryRemover);
-        return nextPlayer;
     }
 
     boolean pruneInactivePlayers(Function<UUID, Player> activePlayerResolver, Consumer<UUID> staleEntryRemover) {
         Objects.requireNonNull(activePlayerResolver, "activePlayerResolver");
         Objects.requireNonNull(staleEntryRemover, "staleEntryRemover");
 
-        List<UUID> staleEntries = new ArrayList<>();
-        boolean mutated = false;
-
-        lock.lock();
-        try {
-            for (LinkedHashSet<UUID> tierSet : orderedTierSets()) {
-                Iterator<UUID> iterator = tierSet.iterator();
-                while (iterator.hasNext()) {
-                    UUID playerId = iterator.next();
-                    if (activePlayerResolver.apply(playerId) != null) {
-                        continue;
-                    }
-
-                    iterator.remove();
-                    tierByPlayer.remove(playerId);
+        while (true) {
+            QueueSnapshot snapshot = snapshotQueue();
+            List<UUID> staleEntries = new ArrayList<>();
+            for (UUID playerId : snapshot.playerIds()) {
+                if (activePlayerResolver.apply(playerId) == null) {
                     staleEntries.add(playerId);
-                    mutated = true;
                 }
             }
 
-            if (mutated) {
-                version.incrementAndGet();
+            long snapshotVersion = removeStaleIfUnchanged(snapshot.version(), staleEntries);
+            if (snapshotVersion == VERSION_MISMATCH) {
+                continue;
             }
-        } finally {
-            lock.unlock();
-        }
 
-        staleEntries.forEach(staleEntryRemover);
-        return mutated;
+            staleEntries.forEach(staleEntryRemover);
+            return !staleEntries.isEmpty();
+        }
     }
 
-    Map<UUID, Integer> buildPositionMap(Function<UUID, Player> activePlayerResolver, Consumer<UUID> staleEntryRemover) {
+    PositionSnapshot buildPositionSnapshot(Function<UUID, Player> activePlayerResolver, Consumer<UUID> staleEntryRemover) {
         Objects.requireNonNull(activePlayerResolver, "activePlayerResolver");
         Objects.requireNonNull(staleEntryRemover, "staleEntryRemover");
 
-        List<UUID> staleEntries = new ArrayList<>();
-        Map<UUID, Integer> positions = new HashMap<>();
-        int position = 1;
-        boolean mutated = false;
+        while (true) {
+            QueueSnapshot snapshot = snapshotQueue();
+            List<UUID> staleEntries = new ArrayList<>();
+            Map<UUID, Integer> positions = new HashMap<>();
+            int position = 1;
 
-        lock.lock();
-        try {
-            for (LinkedHashSet<UUID> tierSet : orderedTierSets()) {
-                Iterator<UUID> iterator = tierSet.iterator();
-                while (iterator.hasNext()) {
-                    UUID playerId = iterator.next();
-                    Player player = activePlayerResolver.apply(playerId);
-                    if (player != null) {
-                        positions.putIfAbsent(playerId, position++);
-                        continue;
-                    }
-
-                    iterator.remove();
-                    tierByPlayer.remove(playerId);
+            for (UUID playerId : snapshot.playerIds()) {
+                if (activePlayerResolver.apply(playerId) != null) {
+                    positions.put(playerId, position++);
+                } else {
                     staleEntries.add(playerId);
-                    mutated = true;
                 }
             }
 
-            if (mutated) {
-                version.incrementAndGet();
+            long snapshotVersion = removeStaleIfUnchanged(snapshot.version(), staleEntries);
+            if (snapshotVersion == VERSION_MISMATCH) {
+                continue;
             }
-        } finally {
-            lock.unlock();
-        }
 
-        staleEntries.forEach(staleEntryRemover);
-        return positions;
+            staleEntries.forEach(staleEntryRemover);
+            return new PositionSnapshot(snapshotVersion, positions);
+        }
     }
 
     List<PlayerManager.QueuedPlayer> getActiveQueuedPlayers(Function<UUID, Player> activePlayerResolver, Consumer<UUID> staleEntryRemover) {
         Objects.requireNonNull(activePlayerResolver, "activePlayerResolver");
         Objects.requireNonNull(staleEntryRemover, "staleEntryRemover");
 
-        List<UUID> staleEntries = new ArrayList<>();
-        List<PlayerManager.QueuedPlayer> activePlayers = new ArrayList<>();
-        boolean mutated = false;
+        while (true) {
+            QueueSnapshot snapshot = snapshotQueue();
+            List<UUID> staleEntries = new ArrayList<>();
+            List<PlayerManager.QueuedPlayer> activePlayers = new ArrayList<>(snapshot.playerIds().size());
 
-        lock.lock();
-        try {
-            for (LinkedHashSet<UUID> tierSet : orderedTierSets()) {
-                Iterator<UUID> iterator = tierSet.iterator();
-                while (iterator.hasNext()) {
-                    UUID playerId = iterator.next();
-                    Player player = activePlayerResolver.apply(playerId);
-                    if (player != null) {
-                        activePlayers.add(new PlayerManager.QueuedPlayer(playerId, player.getUsername()));
-                        continue;
-                    }
-
-                    iterator.remove();
-                    tierByPlayer.remove(playerId);
+            for (UUID playerId : snapshot.playerIds()) {
+                Player player = activePlayerResolver.apply(playerId);
+                if (player != null) {
+                    activePlayers.add(new PlayerManager.QueuedPlayer(playerId, player.getUsername()));
+                } else {
                     staleEntries.add(playerId);
-                    mutated = true;
                 }
             }
 
-            if (mutated) {
-                version.incrementAndGet();
+            if (removeStaleIfUnchanged(snapshot.version(), staleEntries) == VERSION_MISMATCH) {
+                continue;
             }
-        } finally {
-            lock.unlock();
-        }
 
-        staleEntries.forEach(staleEntryRemover);
-        return activePlayers;
+            staleEntries.forEach(staleEntryRemover);
+            return activePlayers;
+        }
     }
 
-    Player findFirstActiveMatching(Function<UUID, Player> activePlayerResolver,
-                                   Consumer<UUID> staleEntryRemover,
-                                   Predicate<Player> matcher) {
+    MatchSnapshot findFirstActiveMatching(Function<UUID, Player> activePlayerResolver,
+                                          Consumer<UUID> staleEntryRemover,
+                                          Predicate<Player> matcher) {
         Objects.requireNonNull(activePlayerResolver, "activePlayerResolver");
         Objects.requireNonNull(staleEntryRemover, "staleEntryRemover");
         Objects.requireNonNull(matcher, "matcher");
 
-        List<UUID> staleEntries = new ArrayList<>();
-        Player matchedPlayer = null;
-        boolean mutated = false;
+        while (true) {
+            QueueSnapshot snapshot = snapshotQueue();
+            List<UUID> staleEntries = new ArrayList<>();
+            Player matchedPlayer = null;
 
-        lock.lock();
-        try {
-            for (LinkedHashSet<UUID> tierSet : orderedTierSets()) {
-                Iterator<UUID> iterator = tierSet.iterator();
-                while (iterator.hasNext()) {
-                    UUID playerId = iterator.next();
-                    Player player = activePlayerResolver.apply(playerId);
-                    if (player == null) {
-                        iterator.remove();
-                        tierByPlayer.remove(playerId);
-                        staleEntries.add(playerId);
-                        mutated = true;
-                        continue;
-                    }
-
-                    if (matcher.test(player)) {
-                        matchedPlayer = player;
-                        break;
-                    }
-                }
-
-                if (matchedPlayer != null) {
+            for (UUID playerId : snapshot.playerIds()) {
+                Player player = activePlayerResolver.apply(playerId);
+                if (player == null) {
+                    staleEntries.add(playerId);
+                } else if (matcher.test(player)) {
+                    matchedPlayer = player;
                     break;
                 }
             }
 
-            if (mutated) {
-                version.incrementAndGet();
+            long snapshotVersion = removeStaleIfUnchanged(snapshot.version(), staleEntries);
+            if (snapshotVersion == VERSION_MISMATCH) {
+                continue;
             }
-        } finally {
-            lock.unlock();
-        }
 
-        staleEntries.forEach(staleEntryRemover);
-        return matchedPlayer;
+            staleEntries.forEach(staleEntryRemover);
+            return new MatchSnapshot(snapshotVersion, matchedPlayer);
+        }
     }
 
     List<Queue<UUID>> orderedQueues() {
@@ -298,6 +234,90 @@ final class ServerQueue {
         return version.get();
     }
 
+    private HeadSnapshot snapshotHead() {
+        lock.lock();
+        try {
+            for (QueueTier tier : QueueTier.values()) {
+                Iterator<UUID> iterator = tierSet(tier).iterator();
+                if (iterator.hasNext()) {
+                    return new HeadSnapshot(version.get(), iterator.next(), tier);
+                }
+            }
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private boolean isCurrentHead(HeadSnapshot expected) {
+        lock.lock();
+        try {
+            if (version.get() != expected.version()) {
+                return false;
+            }
+            Iterator<UUID> iterator = tierSet(expected.tier()).iterator();
+            return iterator.hasNext() && iterator.next().equals(expected.playerId());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private boolean removeCurrentHead(HeadSnapshot expected) {
+        lock.lock();
+        try {
+            if (version.get() != expected.version()) {
+                return false;
+            }
+            Iterator<UUID> iterator = tierSet(expected.tier()).iterator();
+            if (!iterator.hasNext() || !iterator.next().equals(expected.playerId())) {
+                return false;
+            }
+            iterator.remove();
+            tierByPlayer.remove(expected.playerId());
+            version.incrementAndGet();
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private QueueSnapshot snapshotQueue() {
+        lock.lock();
+        try {
+            List<UUID> playerIds = new ArrayList<>(tierByPlayer.size());
+            playerIds.addAll(bypass);
+            playerIds.addAll(priority);
+            playerIds.addAll(normal);
+            return new QueueSnapshot(version.get(), playerIds);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private long removeStaleIfUnchanged(long expectedVersion, List<UUID> staleEntries) {
+        lock.lock();
+        try {
+            if (version.get() != expectedVersion) {
+                return VERSION_MISMATCH;
+            }
+
+            boolean mutated = false;
+            for (UUID playerId : staleEntries) {
+                QueueTier tier = tierByPlayer.remove(playerId);
+                if (tier != null) {
+                    tierSet(tier).remove(playerId);
+                    mutated = true;
+                }
+            }
+            if (mutated) {
+                version.incrementAndGet();
+            }
+            return version.get();
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private LinkedHashSet<UUID> tierSet(QueueTier tier) {
         return switch (tier) {
             case BYPASS -> bypass;
@@ -308,6 +328,18 @@ final class ServerQueue {
 
     private List<LinkedHashSet<UUID>> orderedTierSets() {
         return List.of(bypass, priority, normal);
+    }
+
+    record PositionSnapshot(long version, Map<UUID, Integer> positions) {
+    }
+
+    record MatchSnapshot(long version, Player player) {
+    }
+
+    private record HeadSnapshot(long version, UUID playerId, QueueTier tier) {
+    }
+
+    private record QueueSnapshot(long version, List<UUID> playerIds) {
     }
 
 }

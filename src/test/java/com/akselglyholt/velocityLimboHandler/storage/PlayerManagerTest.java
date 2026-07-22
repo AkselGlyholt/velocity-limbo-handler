@@ -182,4 +182,13 @@ class PlayerManagerTest {
         assertEquals(1, counts.size());
         assertEquals(2, counts.get("survival"));
     }
+
+    @Test
+    void queuePositionIsUnavailableWhenPlayerStateHasNoTargetServer() {
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(UUID.randomUUID());
+        mockedVelocityLimboHandler.when(VelocityLimboHandler::getDirectConnectServer).thenReturn(null);
+
+        assertEquals(-1, playerManager.getQueuePosition(player));
+    }
 }

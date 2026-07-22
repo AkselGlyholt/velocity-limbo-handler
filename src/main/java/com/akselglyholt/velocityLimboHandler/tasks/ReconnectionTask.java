@@ -10,6 +10,9 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 
 import java.util.Collection;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -20,6 +23,7 @@ public class ReconnectionTask implements Runnable {
     private final AuthManager authManager;
     private final ConfigManager configManager;
     private final ReconnectHandler reconnectHandler;
+    private int serverCursor;
 
     public ReconnectionTask(ProxyServer proxyServer, RegisteredServer limboServer, PlayerManager playerManager,
                             AuthManager authManager, ConfigManager configManager, ReconnectHandler reconnectHandler) {
@@ -37,16 +41,31 @@ public class ReconnectionTask implements Runnable {
         Collection<Player> connectedPlayers = limboServer.getPlayersConnected();
         if (connectedPlayers.isEmpty()) return;
 
-        // Prune all in-active members
-        playerManager.pruneInactivePlayers();
+        // Disconnect events normally clean state immediately; this is only a periodic safety net.
+        playerManager.pruneInactivePlayersIfDue();
 
         // Loop through all servers, if queue is enabled
         Map<String, Boolean> maintenanceCache = new HashMap<>();
 
         if (configManager.isQueueEnabled()) {
-            for (RegisteredServer server : proxyServer.getAllServers()) {
+            List<String> queuedServerNames = new ArrayList<>(playerManager.getQueuedServerNames());
+            Collections.sort(queuedServerNames);
+            int serverCount = queuedServerNames.size();
+            if (serverCount == 0) {
+                return;
+            }
+
+            int startIndex = Math.floorMod(serverCursor, serverCount);
+            int batchSize = Math.min(serverCount, Math.max(1, configManager.getReconnectBatchSize()));
+            for (int offset = 0; offset < batchSize; offset++) {
+                String serverName = queuedServerNames.get((startIndex + offset) % serverCount);
+                RegisteredServer server = proxyServer.getServer(serverName).orElse(null);
+                if (server == null) {
+                    continue;
+                }
+
                 // Check if the server is in Maintenance mode
-                if (isServerInMaintenance(server, maintenanceCache)) {
+                if (Utility.isServerInMaintenance(serverName)) {
                     // Is in Maintenance mode, so find first player in queue that can join
                     Player whitelistedPlayer = PlayerManager.findFirstMaintenanceAllowedPlayer(server);
 
@@ -63,11 +82,15 @@ public class ReconnectionTask implements Runnable {
                     reconnectHandler.reconnectPlayer(nextPlayer);
                 }
             }
+            serverCursor = (startIndex + batchSize) % serverCount;
         } else {
             for (Player player : connectedPlayers) {
                 if (!playerManager.hasConnectionIssue(player) && player.isActive()) {
                     // Check if the server is in maintenance mode
                     RegisteredServer previousServer = playerManager.getPreviousServer(player);
+                    if (previousServer == null) {
+                        continue;
+                    }
 
                     if (isServerInMaintenance(previousServer, maintenanceCache)) {
                         // Continue only if player does NOT have a maintenance bypass/whitelist entry

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -20,6 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ReconnectQueueStateTest {
@@ -72,6 +75,45 @@ class ReconnectQueueStateTest {
     }
 
     @Test
+    void getQueuePositionEvictsQueueWhenLastEntryIsStale() {
+        Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
+        ReconnectQueueState state = new ReconnectQueueState(id -> {
+        }, activePlayers::get);
+        RegisteredServer server = mockServer("survival");
+        Player stale = mockPlayer(UUID.randomUUID(), "Stale", activePlayers);
+
+        state.enqueue(stale, server);
+        activePlayers.remove(stale.getUniqueId());
+
+        assertEquals(-1, state.getQueuePosition(stale.getUniqueId(), "survival"));
+        assertEquals(0, state.getQueuedServerCount());
+        assertTrue(state.getQueuedServerNames().isEmpty());
+    }
+
+    @Test
+    void staleCleanupPreservesOwnershipWhenPlayerBecomesActiveAgain() {
+        UUID playerId = UUID.randomUUID();
+        Player rejoinedPlayer = mock(Player.class);
+        when(rejoinedPlayer.getUniqueId()).thenReturn(playerId);
+        when(rejoinedPlayer.hasPermission(anyString())).thenReturn(false);
+        AtomicInteger resolutions = new AtomicInteger();
+        List<UUID> removedStale = new ArrayList<>();
+        ReconnectQueueState state = new ReconnectQueueState(
+                removedStale::add,
+                ignored -> resolutions.getAndIncrement() == 0 ? null : rejoinedPlayer
+        );
+        RegisteredServer server = mockServer("survival");
+        state.enqueue(rejoinedPlayer, server);
+
+        assertNull(state.getNextQueuedPlayer(server));
+
+        assertTrue(removedStale.isEmpty());
+        state.enqueue(rejoinedPlayer, server);
+        state.removePlayer(playerId);
+        assertEquals(0, state.getQueuedPlayerCount());
+    }
+
+    @Test
     void findFirstMaintenanceAllowedPlayer_respectsEligibilityChecks() {
         Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
         ReconnectQueueState state = new ReconnectQueueState(id -> {
@@ -104,6 +146,25 @@ class ReconnectQueueStateTest {
     }
 
     @Test
+    void findFirstMaintenanceAllowedPlayer_cachesNoMatchByQueueVersion() {
+        Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
+        ReconnectQueueState state = new ReconnectQueueState(id -> {
+        }, activePlayers::get);
+        RegisteredServer server = mockServer("factions");
+        Player regular = mockPlayer(UUID.randomUUID(), "Regular", activePlayers);
+        state.enqueue(regular, server);
+
+        try (MockedStatic<Utility> mockedUtility = mockStatic(Utility.class)) {
+            mockedUtility.when(() -> Utility.playerMaintenanceWhitelisted(regular)).thenReturn(false);
+
+            assertNull(state.findFirstMaintenanceAllowedPlayer(server));
+            assertNull(state.findFirstMaintenanceAllowedPlayer(server));
+
+            verify(regular, times(1)).hasPermission("maintenance.admin");
+        }
+    }
+
+    @Test
     void pruneInactivePlayers_updatesCountsAndServerMap() {
         Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
         ReconnectQueueState state = new ReconnectQueueState(id -> {
@@ -126,6 +187,28 @@ class ReconnectQueueStateTest {
         assertEquals(2, state.getQueuedPlayerCount());
         assertEquals(2, state.getQueuedServerCount());
         assertEquals(Map.of("survival", 1, "factions", 1), state.getQueuedServerCounts());
+    }
+
+    @Test
+    void enqueue_movesPlayerBetweenServersAndEvictsEmptyQueue() {
+        Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
+        ReconnectQueueState state = new ReconnectQueueState(id -> {
+        }, activePlayers::get);
+        RegisteredServer survival = mockServer("survival");
+        RegisteredServer factions = mockServer("factions");
+        Player player = mockPlayer(UUID.randomUUID(), "Mover", activePlayers);
+
+        state.enqueue(player, survival);
+        state.enqueue(player, factions);
+
+        assertEquals(0, state.getQueueSize("survival"));
+        assertEquals(1, state.getQueueSize("factions"));
+        assertEquals(List.of("factions"), state.getQueuedServerNames());
+
+        state.removePlayer(player.getUniqueId());
+
+        assertEquals(0, state.getQueuedServerCount());
+        assertTrue(state.getQueuedServerNames().isEmpty());
     }
 
     private RegisteredServer mockServer(String name) {

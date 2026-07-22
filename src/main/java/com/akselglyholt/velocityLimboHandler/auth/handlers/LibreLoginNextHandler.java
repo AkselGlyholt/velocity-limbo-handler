@@ -3,6 +3,7 @@ package com.akselglyholt.velocityLimboHandler.auth.handlers;
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.auth.AuthHandler;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
+import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -13,7 +14,7 @@ import java.util.logging.Logger;
 public class LibreLoginNextHandler implements AuthHandler {
     private final ProxyServer proxy;
     private final ReconnectBlocker blocker;
-    private volatile boolean active;
+    private final boolean active;
     private final Logger logger = VelocityLimboHandler.getLogger();
     private final PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
 
@@ -22,9 +23,8 @@ public class LibreLoginNextHandler implements AuthHandler {
         this.blocker = blocker;
 
         // Detection by plugin id or class existence
-        this.active = proxy.getPluginManager().getPlugin("libreloginnext").isPresent();
-
-        if (active) tryHook();
+        boolean detected = proxy.getPluginManager().getPlugin("libreloginnext").isPresent();
+        this.active = detected && tryHook();
     }
 
     @Override
@@ -44,7 +44,7 @@ public class LibreLoginNextHandler implements AuthHandler {
         blocker.block(player.getUniqueId(), "auth");
     }
 
-    private void tryHook() {
+    private boolean tryHook() {
         try {
             logger.info("LibreLoginNext plugin detected! Integrating now");
 
@@ -53,7 +53,7 @@ public class LibreLoginNextHandler implements AuthHandler {
             var instanceOpt = containerOpt.flatMap(com.velocitypowered.api.plugin.PluginContainer::getInstance);
             if (instanceOpt.isEmpty()) {
                 logger.warning("LibreLoginNext plugin instance not available.");
-                return;
+                return false;
             }
             Object bootstrap = instanceOpt.get();
 
@@ -81,7 +81,7 @@ public class LibreLoginNextHandler implements AuthHandler {
                 try {
                     Player p = extractPlayerFromLibreEvent(event);
                     if (p != null) {
-                        logger.info("Player " + p.getUsername() + " authenticated via LibreLoginNext — unblocked.");
+                        Utility.logDebug(() -> "Player " + p.getUsername() + " authenticated via LibreLoginNext — unblocked.");
                         blocker.unblock(p.getUniqueId());
 
                         RegisteredServer server = playerManager.getPreviousServer(p);
@@ -109,8 +109,10 @@ public class LibreLoginNextHandler implements AuthHandler {
             subscribe.invoke(eventProvider, authType, handler);
 
             logger.info("Subscribed to LibreLoginNext 'authenticated' event.");
+            return true;
         } catch (Exception e) {
             logger.warning("Failed to integrate with LibreLoginNext: " + e.getMessage());
+            return false;
         }
     }
 

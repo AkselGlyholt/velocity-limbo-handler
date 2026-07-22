@@ -6,20 +6,26 @@ import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import dev.dejvokep.boostedyaml.route.Route;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class PlayerManager {
+    private static final long PRUNE_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
+
     public record QueuedPlayer(UUID uuid, String name) {
     }
 
     private final PlayerConnectionState connectionState = new PlayerConnectionState();
-    private final ReconnectQueueState reconnectQueueState = new ReconnectQueueState(this::removePlayerState, this::getActivePlayer);
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
-    private static String queuePositionMsg;
+    private final ReconnectQueueState reconnectQueueState = new ReconnectQueueState(
+            this::removePlayerStateIfInactive,
+            this::getActivePlayer
+    );
+    private final AtomicLong nextPruneAtNanos = new AtomicLong();
+    private volatile String queuePositionMsg;
 
     public PlayerManager() {
         reloadMessages();
@@ -37,7 +43,7 @@ public class PlayerManager {
     public void addPlayer(Player player, RegisteredServer registeredServer) {
         UUID playerId = player.getUniqueId();
         if (connectionState.isRegistered(playerId)) {
-            Utility.logDebug(String.format(
+            Utility.logDebug(() -> String.format(
                     "Skipping addPlayer for %s — already registered for '%s'",
                     player.getUsername(),
                     connectionState.getRegisteredServer(playerId).orElse("unknown")));
@@ -45,22 +51,21 @@ public class PlayerManager {
         }
 
         if (isAuthBlocked(player)) {
-            Utility.logDebug(String.format("Skipping addPlayer for %s — auth blocked", player.getUsername()));
+            Utility.logDebug(() -> String.format("Skipping addPlayer for %s — auth blocked", player.getUsername()));
             return;
         }
 
         String serverName = registeredServer.getServerInfo().getName();
         connectionState.registerPlayer(playerId, serverName);
 
-        VelocityLimboHandler.getLogger().info(String.format(
+        Utility.logDebug(() -> String.format(
                 "%s joined limbo — queued for %s", player.getUsername(), serverName));
 
         Utility.sendWelcomeMessage(player, null);
 
         if (VelocityLimboHandler.isQueueEnabled()) {
             reconnectQueueState.enqueue(player, registeredServer);
-            String formattedMessage = MessageFormatter.formatMessage(queuePositionMsg, player);
-            player.sendMessage(miniMessage.deserialize(formattedMessage));
+            player.sendMessage(MessageFormatter.formatComponent(queuePositionMsg, player));
         }
     }
 
@@ -99,6 +104,9 @@ public class PlayerManager {
 
     public int getQueuePosition(Player player) {
         RegisteredServer previousServer = getPreviousServer(player);
+        if (previousServer == null) {
+            return -1;
+        }
         return reconnectQueueState.getQueuePosition(player.getUniqueId(), previousServer.getServerInfo().getName());
     }
 
@@ -121,21 +129,38 @@ public class PlayerManager {
     public void pruneInactivePlayers() {
         reconnectQueueState.pruneInactivePlayers();
         connectionState.pruneInactivePlayers(this::isInactiveOrMissing);
+        nextPruneAtNanos.set(System.nanoTime() + PRUNE_INTERVAL_NANOS);
+    }
+
+    public void pruneInactivePlayersIfDue() {
+        long now = System.nanoTime();
+        long nextPrune = nextPruneAtNanos.get();
+        if (now < nextPrune || !nextPruneAtNanos.compareAndSet(nextPrune, now + PRUNE_INTERVAL_NANOS)) {
+            return;
+        }
+
+        reconnectQueueState.pruneInactivePlayers();
+        connectionState.pruneInactivePlayers(this::isInactiveOrMissing);
     }
 
     public int getQueuedServerCount() {
-        pruneInactivePlayers();
         return reconnectQueueState.getQueuedServerCount();
     }
 
     public int getQueuedPlayerCount() {
-        pruneInactivePlayers();
         return reconnectQueueState.getQueuedPlayerCount();
     }
 
     public Map<String, Integer> getQueuedServerCounts() {
-        pruneInactivePlayers();
         return reconnectQueueState.getQueuedServerCounts();
+    }
+
+    public List<String> getQueuedServerNames() {
+        return reconnectQueueState.getQueuedServerNames();
+    }
+
+    public int getQueueSize(String serverName) {
+        return reconnectQueueState.getQueueSize(serverName);
     }
 
     public List<QueuedPlayer> getQueueForServer(String serverName) {
@@ -156,6 +181,10 @@ public class PlayerManager {
 
     private void removePlayerState(UUID playerId) {
         connectionState.removePlayerState(playerId);
+    }
+
+    private void removePlayerStateIfInactive(UUID playerId) {
+        connectionState.removePlayerStateIf(playerId, this::isInactiveOrMissing);
     }
 
     private Player getActivePlayer(UUID playerId) {

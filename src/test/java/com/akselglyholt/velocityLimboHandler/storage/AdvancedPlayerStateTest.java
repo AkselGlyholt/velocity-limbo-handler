@@ -262,6 +262,38 @@ class AdvancedPlayerStateTest {
         verify(reconnectHandler, never()).reconnectPlayer(eq(null));
     }
 
+    @Test
+    void reconnectionTask_onlyProcessesServersWithQueuedPlayers() {
+        ConfigManager configManager = mock(ConfigManager.class);
+        RegisteredServer limboServer = mockServer("limbo");
+        RegisteredServer queuedServer = mockServer("survival");
+        RegisteredServer emptyServer = mockServer("creative");
+        ReconnectHandler reconnectHandler = mock(ReconnectHandler.class);
+        Player queuedPlayer = mockPlayer(UUID.randomUUID(), true);
+
+        when(configManager.isQueueEnabled()).thenReturn(true);
+        when(configManager.getReconnectBatchSize()).thenReturn(8);
+        when(limboServer.getPlayersConnected()).thenReturn(List.of(queuedPlayer));
+        when(proxyServer.getAllServers()).thenReturn(List.of(queuedServer, emptyServer));
+        playerManager.addPlayer(queuedPlayer, queuedServer);
+
+        ReconnectionTask task = new ReconnectionTask(
+                proxyServer,
+                limboServer,
+                playerManager,
+                authManager,
+                configManager,
+                reconnectHandler
+        );
+
+        task.run();
+
+        verify(reconnectHandler).reconnectPlayer(queuedPlayer);
+        verify(proxyServer, never()).getAllServers();
+        mockedUtility.verify(() -> Utility.isServerInMaintenance("survival"));
+        mockedUtility.verify(() -> Utility.isServerInMaintenance("creative"), never());
+    }
+
     private RegisteredServer mockServer(String name) {
         RegisteredServer server = mock(RegisteredServer.class);
         ServerInfo info = mock(ServerInfo.class);

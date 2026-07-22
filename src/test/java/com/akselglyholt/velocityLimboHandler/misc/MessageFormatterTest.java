@@ -5,17 +5,18 @@ import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
 import java.util.List;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -45,11 +46,7 @@ class MessageFormatterTest {
         when(player.getUsername()).thenReturn("Aksel");
         when(playerManager.getQueuePosition(player)).thenReturn(4);
         when(playerManager.getPreviousServer(player)).thenReturn(previousServer);
-        when(playerManager.getQueueForServer("survival")).thenReturn(List.of(
-                new PlayerManager.QueuedPlayer(UUID.randomUUID(), "Alpha"),
-                new PlayerManager.QueuedPlayer(UUID.randomUUID(), "Bravo"),
-                new PlayerManager.QueuedPlayer(UUID.randomUUID(), "Charlie")
-        ));
+        when(playerManager.getQueueSize("survival")).thenReturn(3);
         when(previousServer.getServerInfo()).thenReturn(serverInfo);
         when(serverInfo.getName()).thenReturn("survival");
         when(limboServer.getPlayersConnected()).thenReturn(List.of(player, mock(Player.class)));
@@ -69,7 +66,7 @@ class MessageFormatterTest {
 
         assertEquals("Aksel is #4 of 3 for survival with 2 in limbo", result);
         verify(playerManager).getQueuePosition(player);
-        verify(playerManager).getQueueForServer("survival");
+        verify(playerManager).getQueueSize("survival");
         verify(playerManager, times(1)).getPreviousServer(player);
     }
 
@@ -89,5 +86,19 @@ class MessageFormatterTest {
 
         assertEquals(message, result);
         verifyNoInteractions(playerManager, limboServer, previousServer, serverInfo);
+    }
+
+    @Test
+    void formatComponent_reusesKnownQueueValuesWithoutAnotherPositionLookup() {
+        var component = MessageFormatter.formatComponent(
+                "<yellow>#[queue-position] of [queue-size] for [queued-server]</yellow>",
+                player,
+                7,
+                previousServer
+        );
+
+        assertEquals("#7 of 3 for survival", PlainTextComponentSerializer.plainText().serialize(component));
+        verify(playerManager, never()).getQueuePosition(player);
+        verify(playerManager).getQueueSize("survival");
     }
 }
