@@ -128,6 +128,28 @@ class ReconnectQueueStateTest {
         assertEquals(Map.of("survival", 1, "factions", 1), state.getQueuedServerCounts());
     }
 
+    @Test
+    void enqueue_movesPlayerBetweenServersAndEvictsEmptyQueue() {
+        Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
+        ReconnectQueueState state = new ReconnectQueueState(id -> {
+        }, activePlayers::get);
+        RegisteredServer survival = mockServer("survival");
+        RegisteredServer factions = mockServer("factions");
+        Player player = mockPlayer(UUID.randomUUID(), "Mover", activePlayers);
+
+        state.enqueue(player, survival);
+        state.enqueue(player, factions);
+
+        assertEquals(0, state.getQueueSize("survival"));
+        assertEquals(1, state.getQueueSize("factions"));
+        assertEquals(List.of("factions"), state.getQueuedServerNames());
+
+        state.removePlayer(player.getUniqueId());
+
+        assertEquals(0, state.getQueuedServerCount());
+        assertTrue(state.getQueuedServerNames().isEmpty());
+    }
+
     private RegisteredServer mockServer(String name) {
         RegisteredServer server = mock(RegisteredServer.class);
         ServerInfo info = mock(ServerInfo.class);

@@ -138,6 +138,14 @@ public class PlayerManager {
         return reconnectQueueState.getQueuedServerCounts();
     }
 
+    public List<String> getQueuedServerNames() {
+        return reconnectQueueState.getQueuedServerNames();
+    }
+
+    public int getQueueSize(String serverName) {
+        return reconnectQueueState.getQueueSize(serverName);
+    }
+
     public List<QueuedPlayer> getQueueForServer(String serverName) {
         return reconnectQueueState.getQueueForServer(serverName);
     }

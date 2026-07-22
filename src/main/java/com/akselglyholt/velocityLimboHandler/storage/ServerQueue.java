@@ -142,7 +142,7 @@ final class ServerQueue {
         return mutated;
     }
 
-    Map<UUID, Integer> buildPositionMap(Function<UUID, Player> activePlayerResolver, Consumer<UUID> staleEntryRemover) {
+    PositionSnapshot buildPositionSnapshot(Function<UUID, Player> activePlayerResolver, Consumer<UUID> staleEntryRemover) {
         Objects.requireNonNull(activePlayerResolver, "activePlayerResolver");
         Objects.requireNonNull(staleEntryRemover, "staleEntryRemover");
 
@@ -151,6 +151,7 @@ final class ServerQueue {
         int position = 1;
         boolean mutated = false;
 
+        long snapshotVersion;
         lock.lock();
         try {
             for (LinkedHashSet<UUID> tierSet : orderedTierSets()) {
@@ -173,12 +174,13 @@ final class ServerQueue {
             if (mutated) {
                 version.incrementAndGet();
             }
+            snapshotVersion = version.get();
         } finally {
             lock.unlock();
         }
 
         staleEntries.forEach(staleEntryRemover);
-        return positions;
+        return new PositionSnapshot(snapshotVersion, positions);
     }
 
     List<PlayerManager.QueuedPlayer> getActiveQueuedPlayers(Function<UUID, Player> activePlayerResolver, Consumer<UUID> staleEntryRemover) {
@@ -308,6 +310,9 @@ final class ServerQueue {
 
     private List<LinkedHashSet<UUID>> orderedTierSets() {
         return List.of(bypass, priority, normal);
+    }
+
+    record PositionSnapshot(long version, Map<UUID, Integer> positions) {
     }
 
 }
