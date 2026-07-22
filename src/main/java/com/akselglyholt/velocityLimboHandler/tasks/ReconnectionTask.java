@@ -88,6 +88,9 @@ public class ReconnectionTask implements Runnable {
                 if (!playerManager.hasConnectionIssue(player) && player.isActive()) {
                     // Check if the server is in maintenance mode
                     RegisteredServer previousServer = playerManager.getPreviousServer(player);
+                    if (previousServer == null) {
+                        continue;
+                    }
 
                     if (isServerInMaintenance(previousServer, maintenanceCache)) {
                         // Continue only if player does NOT have a maintenance bypass/whitelist entry

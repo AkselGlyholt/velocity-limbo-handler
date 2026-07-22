@@ -86,6 +86,9 @@ public class QueueNotifierTask implements Runnable {
         }
 
         RegisteredServer previousServer = playerManager.getPreviousServer(player);
+        if (previousServer == null) {
+            return;
+        }
         String serverName = previousServer.getServerInfo().getName();
 
         if (maintenanceCache.computeIfAbsent(serverName, Utility::isServerInMaintenance)) {

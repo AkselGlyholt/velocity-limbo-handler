@@ -104,6 +104,9 @@ public class PlayerManager {
 
     public int getQueuePosition(Player player) {
         RegisteredServer previousServer = getPreviousServer(player);
+        if (previousServer == null) {
+            return -1;
+        }
         return reconnectQueueState.getQueuePosition(player.getUniqueId(), previousServer.getServerInfo().getName());
     }
 
