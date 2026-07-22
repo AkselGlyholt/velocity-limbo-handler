@@ -34,6 +34,10 @@ public interface VelocityLimboApi {
 
     Availability availability();
 
+    /**
+     * Creates an owner-scoped controller for a registered plugin instance.
+     * Call this during or after {@code ProxyInitializeEvent}, not from the plugin constructor.
+     */
     LimboController controllerFor(Object pluginInstance);
 
     Optional<ManagedPlayerSnapshot> player(UUID playerId);

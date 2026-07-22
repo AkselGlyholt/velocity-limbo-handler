@@ -41,12 +41,16 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -65,7 +69,14 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private final Map<UUID, ManagedState> players = new HashMap<>();
     private final Map<UUID, EntryIntent> entryIntents = new HashMap<>();
     private final Map<UUID, LeaseRecord> leases = new LinkedHashMap<>();
-    private final Map<UUID, ScheduledTask> expiryTasks = new HashMap<>();
+    private final Map<UUID, LinkedHashSet<UUID>> playerLeaseIds = new HashMap<>();
+    private final Map<String, LinkedHashSet<UUID>> serverLeaseIds = new HashMap<>();
+    private final Map<String, LinkedHashSet<UUID>> ownerLeaseIds = new HashMap<>();
+    private final Map<String, String> serverHoldTargets = new HashMap<>();
+    private final NavigableMap<Instant, LinkedHashSet<UUID>> expirations = new TreeMap<>();
+    private ScheduledTask expiryTask;
+    private Instant expiryTaskAt;
+    private long expiryGeneration;
     private volatile Availability availability = Availability.STARTING;
     private long revision;
 
@@ -87,10 +98,17 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     public void shutdown() {
         availability = Availability.STOPPING;
         synchronized (lock) {
-            expiryTasks.values().forEach(ScheduledTask::cancel);
-            expiryTasks.clear();
+            if (expiryTask != null) expiryTask.cancel();
+            expiryTask = null;
+            expiryTaskAt = null;
+            expiryGeneration++;
+            expirations.clear();
             entryIntents.clear();
             leases.clear();
+            playerLeaseIds.clear();
+            serverLeaseIds.clear();
+            ownerLeaseIds.clear();
+            serverHoldTargets.clear();
             players.clear();
             revision++;
         }
@@ -107,8 +125,8 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     @Override
     public Optional<ManagedPlayerSnapshot> player(UUID playerId) {
         Objects.requireNonNull(playerId, "playerId");
+        expireDueLeases();
         synchronized (lock) {
-            pruneExpiredLocked();
             return Optional.ofNullable(snapshotLocked(playerId));
         }
     }
@@ -116,25 +134,19 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     @Override
     public QueueSnapshot queue(String serverName) {
         String normalized = requireServerName(serverName);
-        synchronized (lock) {
-            pruneExpiredLocked();
-            return queueSnapshotLocked(normalized);
-        }
+        expireDueLeases();
+        return queueSnapshot(normalized);
     }
 
     @Override
     public List<QueueSummary> queues() {
+        expireDueLeases();
+        Map<String, String> names = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        playerManager.getQueuedServerNames().forEach(name -> names.put(name, name));
         synchronized (lock) {
-            pruneExpiredLocked();
-            List<String> names = new ArrayList<>(playerManager.getQueuedServerNames());
-            leases.values().stream()
-                    .filter(lease -> lease.targetType == HoldTarget.SERVER)
-                    .map(lease -> lease.target)
-                    .filter(name -> names.stream().noneMatch(name::equalsIgnoreCase))
-                    .forEach(names::add);
-            names.sort(String.CASE_INSENSITIVE_ORDER);
-            return names.stream().map(this::queueSummaryLocked).toList();
+            serverHoldTargets.values().forEach(name -> names.put(name, name));
         }
+        return names.values().stream().map(this::queueSummary).toList();
     }
 
     public CompletionStage<Void> onPlayerArrived(Player player, RegisteredServer fallbackDestination) {
@@ -178,6 +190,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
 
     /** Preserves the original target across a Velocity pre-connect reroute into limbo. */
     public void recordRerouteIntent(Player player, RegisteredServer intendedServer) {
+        expireDueLeases();
         ManagedPlayerSnapshot before = null;
         ManagedPlayerSnapshot after = null;
         synchronized (lock) {
@@ -199,6 +212,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     private void completeAdmission(Player player) {
+        expireDueLeases();
         ManagedPlayerSnapshot before;
         ManagedPlayerSnapshot after;
         synchronized (lock) {
@@ -241,35 +255,32 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
 
     private void removePlayerLocked(UUID playerId) {
         entryIntents.remove(playerId);
-        List<UUID> leaseIds = leases.values().stream()
-                .filter(lease -> lease.targetType == HoldTarget.PLAYER && lease.target.equals(playerId.toString()))
-                .map(lease -> lease.id).toList();
+        List<UUID> leaseIds = List.copyOf(playerLeaseIds.getOrDefault(playerId, new LinkedHashSet<>()));
         leaseIds.forEach(this::removeLeaseLocked);
         players.remove(playerId);
         revision++;
     }
 
     public boolean isPlayerHeld(UUID playerId) {
+        expireDueLeases();
         synchronized (lock) {
-            pruneExpiredLocked();
             return hasPlayerHoldsLocked(playerId);
         }
     }
 
     public boolean isServerHeld(String serverName) {
+        expireDueLeases();
         synchronized (lock) {
-            pruneExpiredLocked();
-            return leases.values().stream().anyMatch(lease -> lease.targetType == HoldTarget.SERVER
-                    && lease.target.equalsIgnoreCase(serverName));
+            return isServerHeldLocked(serverName);
         }
     }
 
     /** Atomically claims an eligible managed player before a probe or connection begins. */
     public boolean tryClaimConnection(Player player) {
+        expireDueLeases();
         ManagedPlayerSnapshot before;
         ManagedPlayerSnapshot after;
         synchronized (lock) {
-            pruneExpiredLocked();
             ManagedState state = players.get(player.getUniqueId());
             if (state == null || state.phase == LimboPhase.CONNECTING || state.phase == LimboPhase.ENTERING
                     || state.phase == LimboPhase.ADMITTING || state.phase == LimboPhase.CONNECTION_ISSUE
@@ -330,11 +341,13 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     public void setAuthenticationBlocked(UUID playerId, boolean blocked, String reason) {
+        expireDueLeases();
         if (blocked) {
             boolean managedAndActive;
             synchronized (lock) {
-                boolean exists = leases.values().stream().anyMatch(lease -> lease.ownerId.equals(AUTH_OWNER)
-                        && lease.targetType == HoldTarget.PLAYER && lease.target.equals(playerId.toString()));
+                boolean exists = playerLeaseIds.getOrDefault(playerId, new LinkedHashSet<>()).stream()
+                        .map(leases::get).filter(Objects::nonNull)
+                        .anyMatch(lease -> lease.ownerId.equals(AUTH_OWNER));
                 if (exists) return;
                 managedAndActive = players.containsKey(playerId)
                         && proxy.getPlayer(playerId).filter(Player::isActive).isPresent();
@@ -351,19 +364,19 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
 
         List<UUID> owned;
         synchronized (lock) {
-            owned = leases.values().stream().filter(lease -> lease.ownerId.equals(AUTH_OWNER)
-                    && lease.targetType == HoldTarget.PLAYER && lease.target.equals(playerId.toString()))
-                    .map(lease -> lease.id).toList();
+            owned = playerLeaseIds.getOrDefault(playerId, new LinkedHashSet<>()).stream()
+                    .map(leases::get).filter(Objects::nonNull)
+                    .filter(lease -> lease.ownerId.equals(AUTH_OWNER)).map(lease -> lease.id).toList();
         }
         owned.forEach(id -> releaseLease(AUTH_OWNER, id));
     }
 
     private HoldResult acquirePlayerHold(String ownerId, UUID playerId, HoldRequest request) {
+        expireDueLeases();
         ManagedPlayerSnapshot before;
         ManagedPlayerSnapshot after;
         HoldResult result;
         synchronized (lock) {
-            pruneExpiredLocked();
             ManagedState state = players.get(playerId);
             Optional<Player> player = proxy.getPlayer(playerId).filter(Player::isActive);
             if (state == null || player.isEmpty()) return HoldResult.failed(HoldStatus.INACTIVE_OR_UNMANAGED_PLAYER);
@@ -383,8 +396,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
 
     private HoldResult acquirePlayerHoldLocked(String ownerId, UUID playerId, HoldRequest request) {
         LeaseRecord lease = newLease(ownerId, HoldTarget.PLAYER, playerId.toString(), request);
-        leases.put(lease.id, lease);
-        scheduleExpiry(lease);
+        addLeaseLocked(lease);
         logLease("acquired", lease);
         return HoldResult.acquired(new LeaseHandle(lease.id));
     }
@@ -400,15 +412,14 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         if (server == null) return HoldResult.failed(HoldStatus.UNKNOWN_SERVER);
         if (isLimboServer(serverName)) return HoldResult.failed(HoldStatus.INVALID_TARGET);
 
+        expireDueLeases();
         LeaseRecord lease;
         List<HoldSnapshot> holds;
         long eventRevision;
         synchronized (lock) {
-            pruneExpiredLocked();
             lease = newLease(ownerId, HoldTarget.SERVER, server.getServerInfo().getName(), request);
-            leases.put(lease.id, lease);
+            addLeaseLocked(lease);
             eventRevision = ++revision;
-            scheduleExpiry(lease);
             holds = serverHoldsLocked(lease.target);
         }
         logLease("acquired", lease);
@@ -417,13 +428,13 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     private HoldReleaseResult releaseLease(String ownerId, UUID leaseId) {
+        expireDueLeases();
         LeaseRecord lease;
         ManagedPlayerSnapshot before = null;
         ManagedPlayerSnapshot after = null;
         List<HoldSnapshot> serverHolds = null;
         long eventRevision = 0;
         synchronized (lock) {
-            pruneExpiredLocked();
             lease = leases.get(leaseId);
             if (lease == null) return HoldReleaseResult.NOT_FOUND;
             if (!lease.ownerId.equals(ownerId)) return HoldReleaseResult.NOT_OWNER;
@@ -464,16 +475,17 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     private int releaseAll(String ownerId) {
+        expireDueLeases();
         List<UUID> ids;
         synchronized (lock) {
-            pruneExpiredLocked();
-            ids = leases.values().stream().filter(lease -> lease.ownerId.equals(ownerId)).map(lease -> lease.id).toList();
+            ids = List.copyOf(ownerLeaseIds.getOrDefault(ownerId, new LinkedHashSet<>()));
         }
         ids.forEach(id -> releaseLease(ownerId, id));
         return ids.size();
     }
 
     private RetargetResult retarget(UUID playerId, String requestedName) {
+        expireDueLeases();
         String serverName;
         try {
             serverName = requireServerName(requestedName);
@@ -565,11 +577,9 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private void cleanupFailedEntry(UUID playerId) {
         synchronized (lock) {
             entryIntents.remove(playerId);
-            List<UUID> abandonedHolds = leases.values().stream()
-                    .filter(lease -> lease.targetType == HoldTarget.PLAYER
-                            && lease.target.equals(playerId.toString())
-                            && !lease.ownerId.equals(AUTH_OWNER))
-                    .map(lease -> lease.id).toList();
+            List<UUID> abandonedHolds = playerLeaseIds.getOrDefault(playerId, new LinkedHashSet<>()).stream()
+                    .map(leases::get).filter(Objects::nonNull)
+                    .filter(lease -> !lease.ownerId.equals(AUTH_OWNER)).map(lease -> lease.id).toList();
             abandonedHolds.forEach(this::removeLeaseLocked);
             ManagedState state = players.get(playerId);
             if (state != null && state.phase == LimboPhase.ENTERING) players.remove(playerId);
@@ -592,22 +602,33 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                 playerHoldsLocked(playerId), serverHoldsLocked(state.destination), state.revision);
     }
 
-    private QueueSnapshot queueSnapshotLocked(String serverName) {
+    private QueueSnapshot queueSnapshot(String serverName) {
         List<PlayerManager.QueuedPlayer> queue = playerManager.getQueueForServer(serverName);
+        Map<UUID, Long> playerRevisions = new HashMap<>();
+        List<HoldSnapshot> serverHolds;
+        long snapshotRevision;
+        synchronized (lock) {
+            for (PlayerManager.QueuedPlayer queued : queue) {
+                ManagedState state = players.get(queued.uuid());
+                if (state != null) playerRevisions.put(queued.uuid(), state.revision);
+            }
+            serverHolds = serverHoldsLocked(serverName);
+            snapshotRevision = revision;
+        }
+
         List<QueuedPlayerSnapshot> entries = new ArrayList<>(queue.size());
         int position = 1;
         for (PlayerManager.QueuedPlayer queued : queue) {
             Player player = proxy.getPlayer(queued.uuid()).orElse(null);
             QueueTier tier = player == null ? QueueTier.NORMAL : tierFor(player, serverName);
-            ManagedState state = players.get(queued.uuid());
             entries.add(new QueuedPlayerSnapshot(queued.uuid(), queued.name(), position++, tier,
-                    state == null ? revision : state.revision));
+                    playerRevisions.getOrDefault(queued.uuid(), snapshotRevision)));
         }
-        return new QueueSnapshot(canonicalServerName(serverName), entries, serverHoldsLocked(serverName), revision);
+        return new QueueSnapshot(canonicalServerName(serverName), entries, serverHolds, snapshotRevision);
     }
 
-    private QueueSummary queueSummaryLocked(String serverName) {
-        QueueSnapshot snapshot = queueSnapshotLocked(serverName);
+    private QueueSummary queueSummary(String serverName) {
+        QueueSnapshot snapshot = queueSnapshot(serverName);
         Map<QueueTier, Integer> counts = new EnumMap<>(QueueTier.class);
         for (QueueTier tier : QueueTier.values()) counts.put(tier, 0);
         snapshot.players().forEach(player -> counts.compute(player.tier(), (ignored, count) -> count + 1));
@@ -624,20 +645,22 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     private List<HoldSnapshot> holdsLocked(HoldTarget type, String target) {
-        return leases.values().stream()
-                .filter(lease -> lease.targetType == type && lease.target.equalsIgnoreCase(target))
+        Set<UUID> ids = type == HoldTarget.PLAYER
+                ? playerLeaseIds.getOrDefault(UUID.fromString(target), new LinkedHashSet<>())
+                : serverLeaseIds.getOrDefault(normalizeServerName(target), new LinkedHashSet<>());
+        return ids.stream().map(leases::get).filter(Objects::nonNull)
                 .sorted(Comparator.comparing(lease -> lease.acquiredAt))
                 .map(LeaseRecord::snapshot).toList();
     }
 
     private boolean hasPlayerHoldsLocked(UUID playerId) {
-        String target = playerId.toString();
-        return leases.values().stream().anyMatch(lease -> lease.targetType == HoldTarget.PLAYER && lease.target.equals(target));
+        Set<UUID> ids = playerLeaseIds.get(playerId);
+        return ids != null && !ids.isEmpty();
     }
 
     private boolean isServerHeldLocked(String serverName) {
-        return leases.values().stream().anyMatch(lease -> lease.targetType == HoldTarget.SERVER
-                && lease.target.equalsIgnoreCase(serverName));
+        Set<UUID> ids = serverLeaseIds.get(normalizeServerName(serverName));
+        return ids != null && !ids.isEmpty();
     }
 
     private LeaseRecord newLease(String ownerId, HoldTarget targetType, String target, HoldRequest request) {
@@ -646,67 +669,126 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                 request.duration().map(acquired::plus), ++revision);
     }
 
-    private void scheduleExpiry(LeaseRecord lease) {
+    private void addLeaseLocked(LeaseRecord lease) {
+        leases.put(lease.id, lease);
+        ownerLeaseIds.computeIfAbsent(lease.ownerId, ignored -> new LinkedHashSet<>()).add(lease.id);
+        if (lease.targetType == HoldTarget.PLAYER) {
+            playerLeaseIds.computeIfAbsent(UUID.fromString(lease.target), ignored -> new LinkedHashSet<>()).add(lease.id);
+        } else {
+            String normalized = normalizeServerName(lease.target);
+            serverLeaseIds.computeIfAbsent(normalized, ignored -> new LinkedHashSet<>()).add(lease.id);
+            serverHoldTargets.putIfAbsent(normalized, lease.target);
+        }
         lease.expiresAt.ifPresent(expires -> {
-            long delay = Math.max(1, expires.toEpochMilli() - Instant.now().toEpochMilli());
-            try {
-                ScheduledTask task = proxy.getScheduler().buildTask(plugin, () -> expireLease(lease.id))
-                        .delay(delay, TimeUnit.MILLISECONDS).schedule();
-                expiryTasks.put(lease.id, task);
-            } catch (RuntimeException exception) {
-                VelocityLimboHandler.getLogger().log(Level.WARNING, "Could not schedule hold expiry", exception);
-            }
+            expirations.computeIfAbsent(expires, ignored -> new LinkedHashSet<>()).add(lease.id);
+            if (expiryTaskAt == null || expires.isBefore(expiryTaskAt)) scheduleNextExpiryLocked();
         });
     }
 
-    private void expireLease(UUID leaseId) {
-        LeaseRecord lease;
-        ManagedPlayerSnapshot before = null;
-        ManagedPlayerSnapshot after = null;
-        List<HoldSnapshot> holds = null;
-        long eventRevision;
-        synchronized (lock) {
-            lease = leases.get(leaseId);
-            if (lease == null || lease.expiresAt.isEmpty() || lease.expiresAt.orElseThrow().isAfter(Instant.now())) return;
-            UUID playerId = lease.targetType == HoldTarget.PLAYER ? UUID.fromString(lease.target) : null;
-            if (playerId != null) before = snapshotLocked(playerId);
-            removeLeaseLocked(leaseId);
-            eventRevision = ++revision;
-            if (playerId != null) after = resumeAfterFinalHoldLocked(playerId);
-            else holds = serverHoldsLocked(lease.target);
+    private void scheduleNextExpiryLocked() {
+        if (expiryTask != null) expiryTask.cancel();
+        expiryTask = null;
+        expiryTaskAt = null;
+        long generation = ++expiryGeneration;
+        if (availability == Availability.STOPPING || expirations.isEmpty()) return;
+
+        Instant nextExpiry = expirations.firstKey();
+        long delay = Math.max(1, nextExpiry.toEpochMilli() - Instant.now().toEpochMilli());
+        expiryTaskAt = nextExpiry;
+        try {
+            expiryTask = proxy.getScheduler().buildTask(plugin, () -> expireDueLeases(generation))
+                    .delay(delay, TimeUnit.MILLISECONDS).schedule();
+        } catch (RuntimeException exception) {
+            expiryTaskAt = null;
+            VelocityLimboHandler.getLogger().log(Level.WARNING, "Could not schedule hold expiry", exception);
         }
-        logLease("expired", lease);
-        if (before != null && after != null) publishTransition(before, after);
-        if (holds != null) proxy.getEventManager().fireAndForget(new ServerHoldChangedEvent(lease.target, holds, eventRevision));
     }
 
-    private void pruneExpiredLocked() {
-        Instant now = Instant.now();
-        List<UUID> expired = leases.values().stream()
-                .filter(lease -> lease.expiresAt.map(expiry -> !expiry.isAfter(now)).orElse(false))
-                .map(lease -> lease.id).toList();
-        expired.forEach(id -> {
-            LeaseRecord lease = leases.get(id);
-            if (lease != null) {
+    private void expireDueLeases() {
+        expireDueLeases(-1);
+    }
+
+    private void expireDueLeases(long expectedGeneration) {
+        List<ExpiredLeaseResult> expired = new ArrayList<>();
+        synchronized (lock) {
+            if (expectedGeneration >= 0 && expectedGeneration != expiryGeneration) return;
+            Instant now = Instant.now();
+            if (expirations.isEmpty() || expirations.firstKey().isAfter(now)) {
+                if (expectedGeneration >= 0) scheduleNextExpiryLocked();
+                return;
+            }
+
+            if (expiryTask != null) expiryTask.cancel();
+            expiryTask = null;
+            expiryTaskAt = null;
+            expiryGeneration++;
+
+            List<UUID> dueIds = new ArrayList<>();
+            while (!expirations.isEmpty() && !expirations.firstKey().isAfter(now)) {
+                dueIds.addAll(expirations.pollFirstEntry().getValue());
+            }
+
+            for (UUID leaseId : dueIds) {
+                LeaseRecord lease = leases.get(leaseId);
+                if (lease == null || lease.expiresAt.isEmpty()
+                        || lease.expiresAt.orElseThrow().isAfter(now)) continue;
                 UUID playerId = lease.targetType == HoldTarget.PLAYER ? UUID.fromString(lease.target) : null;
                 ManagedPlayerSnapshot before = playerId == null ? null : snapshotLocked(playerId);
-                removeLeaseLocked(id);
+                removeLeaseIndexesLocked(lease);
                 long eventRevision = ++revision;
                 ManagedPlayerSnapshot after = playerId == null ? null : resumeAfterFinalHoldLocked(playerId);
-                logLease("expired", lease);
-                if (before != null && after != null) publishTransition(before, after);
-                if (playerId == null) {
-                    proxy.getEventManager().fireAndForget(new ServerHoldChangedEvent(
-                            lease.target, serverHoldsLocked(lease.target), eventRevision));
-                }
+                List<HoldSnapshot> holds = playerId == null ? serverHoldsLocked(lease.target) : null;
+                expired.add(new ExpiredLeaseResult(lease, before, after, holds, eventRevision));
             }
-        });
+            scheduleNextExpiryLocked();
+        }
+
+        for (ExpiredLeaseResult result : expired) {
+            logLease("expired", result.lease);
+            if (result.before != null && result.after != null) publishTransition(result.before, result.after);
+            if (result.serverHolds != null) {
+                proxy.getEventManager().fireAndForget(new ServerHoldChangedEvent(
+                        result.lease.target, result.serverHolds, result.eventRevision));
+            }
+        }
     }
 
     private void removeLeaseLocked(UUID leaseId) {
-        leases.remove(leaseId);
-        ScheduledTask task = expiryTasks.remove(leaseId);
-        if (task != null) task.cancel();
+        LeaseRecord lease = leases.get(leaseId);
+        if (lease == null) return;
+        removeLeaseIndexesLocked(lease);
+        lease.expiresAt.ifPresent(expires -> {
+            LinkedHashSet<UUID> ids = expirations.get(expires);
+            if (ids == null) return;
+            ids.remove(leaseId);
+            if (ids.isEmpty()) {
+                expirations.remove(expires);
+                if (expires.equals(expiryTaskAt)) scheduleNextExpiryLocked();
+            }
+        });
+    }
+
+    private void removeLeaseIndexesLocked(LeaseRecord lease) {
+        leases.remove(lease.id);
+        removeFromIndex(ownerLeaseIds, lease.ownerId, lease.id);
+        if (lease.targetType == HoldTarget.PLAYER) {
+            removeFromIndex(playerLeaseIds, UUID.fromString(lease.target), lease.id);
+        } else {
+            String normalized = normalizeServerName(lease.target);
+            removeFromIndex(serverLeaseIds, normalized, lease.id);
+            if (!serverLeaseIds.containsKey(normalized)) serverHoldTargets.remove(normalized);
+        }
+    }
+
+    private <K> void removeFromIndex(Map<K, LinkedHashSet<UUID>> index, K key, UUID leaseId) {
+        LinkedHashSet<UUID> ids = index.get(key);
+        if (ids == null) return;
+        ids.remove(leaseId);
+        if (ids.isEmpty()) index.remove(key);
+    }
+
+    private String normalizeServerName(String serverName) {
+        return serverName.toLowerCase(Locale.ROOT);
     }
 
     private RegisteredServer requireRegisteredServer(String serverName) {
@@ -752,18 +834,16 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     public int heldPlayerCount() {
+        expireDueLeases();
         synchronized (lock) {
-            pruneExpiredLocked();
-            return (int) leases.values().stream().filter(lease -> lease.targetType == HoldTarget.PLAYER)
-                    .map(lease -> lease.target).distinct().count();
+            return playerLeaseIds.size();
         }
     }
 
     public int heldServerCount() {
+        expireDueLeases();
         synchronized (lock) {
-            pruneExpiredLocked();
-            return (int) leases.values().stream().filter(lease -> lease.targetType == HoldTarget.SERVER)
-                    .map(lease -> lease.target.toLowerCase(Locale.ROOT)).distinct().count();
+            return serverLeaseIds.size();
         }
     }
 
@@ -819,6 +899,10 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private record EntryIntent(String destination, boolean apiEntry, Instant createdAt) { }
 
     private record LeaseHandle(UUID id) implements HoldLease { }
+
+    private record ExpiredLeaseResult(LeaseRecord lease, ManagedPlayerSnapshot before,
+                                      ManagedPlayerSnapshot after, List<HoldSnapshot> serverHolds,
+                                      long eventRevision) { }
 
     private record LeaseRecord(UUID id, String ownerId, HoldTarget targetType, String target, String reason,
                                Instant acquiredAt, Optional<Instant> expiresAt, long revision) {
