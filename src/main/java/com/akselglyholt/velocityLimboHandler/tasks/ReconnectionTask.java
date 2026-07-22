@@ -37,16 +37,21 @@ public class ReconnectionTask implements Runnable {
         Collection<Player> connectedPlayers = limboServer.getPlayersConnected();
         if (connectedPlayers.isEmpty()) return;
 
-        // Prune all in-active members
-        playerManager.pruneInactivePlayers();
+        // Disconnect events normally clean state immediately; this is only a periodic safety net.
+        playerManager.pruneInactivePlayersIfDue();
 
         // Loop through all servers, if queue is enabled
         Map<String, Boolean> maintenanceCache = new HashMap<>();
 
         if (configManager.isQueueEnabled()) {
-            for (RegisteredServer server : proxyServer.getAllServers()) {
+            for (String serverName : playerManager.getQueuedServerNames()) {
+                RegisteredServer server = proxyServer.getServer(serverName).orElse(null);
+                if (server == null) {
+                    continue;
+                }
+
                 // Check if the server is in Maintenance mode
-                if (isServerInMaintenance(server, maintenanceCache)) {
+                if (Utility.isServerInMaintenance(serverName)) {
                     // Is in Maintenance mode, so find first player in queue that can join
                     Player whitelistedPlayer = PlayerManager.findFirstMaintenanceAllowedPlayer(server);
 

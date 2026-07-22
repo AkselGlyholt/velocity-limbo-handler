@@ -11,14 +11,19 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class PlayerManager {
+    private static final long PRUNE_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
+
     public record QueuedPlayer(UUID uuid, String name) {
     }
 
     private final PlayerConnectionState connectionState = new PlayerConnectionState();
     private final ReconnectQueueState reconnectQueueState = new ReconnectQueueState(this::removePlayerState, this::getActivePlayer);
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
+    private final AtomicLong nextPruneAtNanos = new AtomicLong();
     private static String queuePositionMsg;
 
     public PlayerManager() {
@@ -121,20 +126,29 @@ public class PlayerManager {
     public void pruneInactivePlayers() {
         reconnectQueueState.pruneInactivePlayers();
         connectionState.pruneInactivePlayers(this::isInactiveOrMissing);
+        nextPruneAtNanos.set(System.nanoTime() + PRUNE_INTERVAL_NANOS);
+    }
+
+    public void pruneInactivePlayersIfDue() {
+        long now = System.nanoTime();
+        long nextPrune = nextPruneAtNanos.get();
+        if (now < nextPrune || !nextPruneAtNanos.compareAndSet(nextPrune, now + PRUNE_INTERVAL_NANOS)) {
+            return;
+        }
+
+        reconnectQueueState.pruneInactivePlayers();
+        connectionState.pruneInactivePlayers(this::isInactiveOrMissing);
     }
 
     public int getQueuedServerCount() {
-        pruneInactivePlayers();
         return reconnectQueueState.getQueuedServerCount();
     }
 
     public int getQueuedPlayerCount() {
-        pruneInactivePlayers();
         return reconnectQueueState.getQueuedPlayerCount();
     }
 
     public Map<String, Integer> getQueuedServerCounts() {
-        pruneInactivePlayers();
         return reconnectQueueState.getQueuedServerCounts();
     }
 
