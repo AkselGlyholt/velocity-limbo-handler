@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 final class ReconnectQueueState {
-    private static final long POSITION_CACHE_TTL_NANOS = TimeUnit.SECONDS.toNanos(1);
+    private static final long POSITION_CACHE_TTL_NANOS = TimeUnit.MINUTES.toNanos(1);
     private static final long MAINTENANCE_CANDIDATE_TTL_NANOS = TimeUnit.SECONDS.toNanos(5);
 
     private final Map<String, ServerQueue> reconnectQueues = new ConcurrentHashMap<>();
