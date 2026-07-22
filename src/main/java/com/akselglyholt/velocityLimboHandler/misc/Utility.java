@@ -11,6 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Method;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,7 +45,7 @@ public class Utility {
     public static void sendWelcomeMessage(Player player, String reason) {
         if (reason == null) reason = "unknown";
 
-        Component message = switch (reason.toLowerCase()) {
+        Component message = switch (reason.toLowerCase(Locale.ROOT)) {
             case "afk" -> AFK_MESSAGE;
             case "server-restart" -> SERVER_RESTART_MESSAGE;
             case "connection-issue" -> CONNECTION_ISSUE_MESSAGE;

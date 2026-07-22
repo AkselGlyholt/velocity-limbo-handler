@@ -16,6 +16,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -177,7 +178,8 @@ public class ReconnectHandler implements AutoCloseable {
             }
         }
 
-        if (reason instanceof TextComponent textComponent && textComponent.content().toLowerCase().contains("whitelist")) {
+        if (reason instanceof TextComponent textComponent
+                && textComponent.content().toLowerCase(Locale.ROOT).contains("whitelist")) {
             player.sendMessage(MessageFormatter.formatComponent(configManager.getWhitelistedMsg(), player));
             playerManager.addPlayerWithIssue(player, "not_whitelisted");
             playerManager.removePlayerFromQueue(player);
