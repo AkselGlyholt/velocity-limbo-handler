@@ -1,5 +1,9 @@
 package com.akselglyholt.velocitylimbohandler.api;
 
+import com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability;
+import com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot;
+import com.akselglyholt.velocitylimbohandler.api.queue.QueueSnapshot;
+import com.akselglyholt.velocitylimbohandler.api.queue.QueueSummary;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.proxy.ProxyServer;
 

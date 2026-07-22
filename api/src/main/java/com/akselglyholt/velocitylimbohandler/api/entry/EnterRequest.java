@@ -1,4 +1,6 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.entry;
+
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
 
 import java.util.Objects;
 import java.util.Optional;

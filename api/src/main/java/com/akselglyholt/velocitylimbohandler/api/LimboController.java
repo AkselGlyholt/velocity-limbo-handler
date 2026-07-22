@@ -1,5 +1,11 @@
 package com.akselglyholt.velocitylimbohandler.api;
 
+import com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest;
+import com.akselglyholt.velocitylimbohandler.api.entry.EnterResult;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseResult;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
+import com.akselglyholt.velocitylimbohandler.api.player.RetargetResult;
 import com.velocitypowered.api.proxy.Player;
 
 import java.util.UUID;

@@ -1,8 +1,8 @@
 package example;
 
-import com.akselglyholt.velocitylimbohandler.api.HoldRequest;
 import com.akselglyholt.velocitylimbohandler.api.LimboController;
 import com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
 import com.velocitypowered.api.plugin.Dependency;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;

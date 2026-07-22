@@ -1,6 +1,6 @@
 package com.akselglyholt.velocitylimbohandler.api.events;
 
-import com.akselglyholt.velocitylimbohandler.api.ManagedPlayerSnapshot;
+import com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot;
 
 import java.util.Objects;
 

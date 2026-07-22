@@ -1,4 +1,4 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.hold;
 
 /** Result of releasing a hold through an owner-scoped controller. */
 public enum HoldReleaseResult {

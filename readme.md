@@ -137,6 +137,12 @@ dependencies {
 ### Basic use
 
 ```java
+import com.akselglyholt.velocitylimbohandler.api.LimboController;
+import com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi;
+import com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
+
 VelocityLimboApi api = VelocityLimboApi.get(proxyServer);
 LimboController limbo = api.controllerFor(this); // validated loaded plugin instance
 
@@ -146,6 +152,9 @@ limbo.enterLimbo(player,
         EnterRequest.currentServer().withInitialHold(new HoldRequest("awaiting profile")))
     .thenAccept(result -> logger.info("Limbo entry: " + result));
 ```
+
+The root API package contains only `VelocityLimboApi` and `LimboController`. Supporting contracts
+are grouped into the `entry`, `events`, `hold`, `lifecycle`, `player`, and `queue` subpackages.
 
 Each controller can release only its own opaque leases. The first player hold removes that player
 from the queue; releasing the final hold reevaluates permissions and appends them to the back of the

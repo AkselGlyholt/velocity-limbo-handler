@@ -5,7 +5,7 @@ import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
-import com.akselglyholt.velocitylimbohandler.api.ReconnectOutcome;
+import com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome;
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;

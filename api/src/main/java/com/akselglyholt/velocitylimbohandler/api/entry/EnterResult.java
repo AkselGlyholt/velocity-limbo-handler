@@ -1,4 +1,4 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.entry;
 
 /** Result of an atomic limbo-entry request. */
 public enum EnterResult {

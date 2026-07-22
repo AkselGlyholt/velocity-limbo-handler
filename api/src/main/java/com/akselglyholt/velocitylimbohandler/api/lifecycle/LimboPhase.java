@@ -1,4 +1,4 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.lifecycle;
 
 /** A managed player's current lifecycle phase. */
 public enum LimboPhase {
