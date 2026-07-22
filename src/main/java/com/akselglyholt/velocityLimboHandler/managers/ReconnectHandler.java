@@ -76,6 +76,11 @@ public class ReconnectHandler implements AutoCloseable {
             if (!player.isActive()) {
                 return;
             }
+            if (isMaintenanceBlocked(player, server)) {
+                Utility.logDebug(() -> String.format("Skipping reconnect for %s — %s entered maintenance",
+                        player.getUsername(), server.getServerInfo().getName()));
+                return;
+            }
 
             Utility.logDebug(() -> String.format("Connecting %s to %s",
                     player.getUsername(), server.getServerInfo().getName()));
@@ -92,6 +97,18 @@ public class ReconnectHandler implements AutoCloseable {
                 playerManager.setPlayerConnecting(player, false);
             }
         }
+    }
+
+    private boolean isMaintenanceBlocked(Player player, RegisteredServer server) {
+        String serverName = server.getServerInfo().getName();
+        if (!Utility.isServerInMaintenance(serverName)) {
+            return false;
+        }
+
+        return !player.hasPermission("maintenance.admin")
+                && !player.hasPermission("maintenance.bypass")
+                && !player.hasPermission("maintenance.singleserver.bypass." + serverName)
+                && !Utility.playerMaintenanceWhitelisted(player);
     }
 
     private void handleConnectionResult(Player player, RegisteredServer server,

@@ -108,4 +108,35 @@ class ReconnectHandlerTest {
         verify(healthTracker).invalidate("survival");
         verify(playerManager).setPlayerConnecting(player, false);
     }
+
+    @Test
+    void maintenanceEnabledDuringProbeBlocksConnectionWithoutBypass() {
+        CompletableFuture<BackendHealthTracker.Availability> probe = new CompletableFuture<>();
+        when(healthTracker.probe(server)).thenReturn(probe);
+
+        assertTrue(reconnectHandler.reconnectPlayer(player));
+        utility.when(() -> Utility.isServerInMaintenance("survival")).thenReturn(true);
+        utility.when(() -> Utility.playerMaintenanceWhitelisted(player)).thenReturn(false);
+        probe.complete(new BackendHealthTracker.Availability(true, false, 5));
+
+        verify(player, never()).createConnectionRequest(server);
+        verify(playerManager).setPlayerConnecting(player, false);
+    }
+
+    @Test
+    void maintenanceEnabledDuringProbeAllowsBypassConnection() {
+        CompletableFuture<BackendHealthTracker.Availability> probe = new CompletableFuture<>();
+        CompletableFuture<ConnectionRequestBuilder.Result> connection = new CompletableFuture<>();
+        ConnectionRequestBuilder request = mock(ConnectionRequestBuilder.class);
+        when(healthTracker.probe(server)).thenReturn(probe);
+        when(player.hasPermission("maintenance.bypass")).thenReturn(true);
+        when(player.createConnectionRequest(server)).thenReturn(request);
+        when(request.connect()).thenReturn(connection);
+
+        assertTrue(reconnectHandler.reconnectPlayer(player));
+        utility.when(() -> Utility.isServerInMaintenance("survival")).thenReturn(true);
+        probe.complete(new BackendHealthTracker.Availability(true, false, 5));
+
+        verify(player).createConnectionRequest(server);
+    }
 }
