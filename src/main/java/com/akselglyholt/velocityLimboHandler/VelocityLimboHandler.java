@@ -79,7 +79,9 @@ public class VelocityLimboHandler {
         // Initialize ConfigManager
         configManager = new ConfigManager(dataDirectory, logger);
         try {
-            configManager.load();
+            configManager.load((limboName, directConnectName) ->
+                    server.getServer(limboName).isPresent() && server.getServer(directConnectName).isPresent()
+            );
         } catch (IOException e) {
             logger.log(Level.SEVERE, "Unable to load VelocityLimboHandler configuration", e);
             throw new IllegalStateException("VelocityLimboHandler cannot start without a valid configuration", e);

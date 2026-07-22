@@ -103,7 +103,10 @@ public class VlhAdminCommand implements SimpleCommand {
         VelocityLimboHandler plugin = VelocityLimboHandler.getInstance();
         VelocityLimboHandler.getProxyServer().getScheduler().buildTask(plugin, () -> {
             try {
-                configManager.load();
+                configManager.load((limboName, directConnectName) ->
+                        VelocityLimboHandler.getProxyServer().getServer(limboName).isPresent()
+                                && VelocityLimboHandler.getProxyServer().getServer(directConnectName).isPresent()
+                );
                 plugin.applyReloadedConfiguration();
                 send(source, "<green>✔ Reload complete.</green> <gray>Configuration, messages, commands, and task schedules were refreshed.</gray>");
             } catch (IOException | RuntimeException exception) {

@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BiPredicate;
 import java.util.logging.Logger;
 
 public class ConfigManager {
@@ -32,7 +33,12 @@ public class ConfigManager {
         this.logger = logger;
     }
 
-    public synchronized void load() throws IOException {
+    public void load() throws IOException {
+        load((limboName, directConnectName) -> true);
+    }
+
+    public synchronized void load(BiPredicate<String, String> serverValidator) throws IOException {
+        Objects.requireNonNull(serverValidator, "serverValidator");
         YamlDocument loadedConfig = YamlDocument.create(
                 new File(dataDirectory.toFile(), "config.yml"),
                 Objects.requireNonNull(getClass().getResourceAsStream("/config.yml")),
@@ -62,6 +68,14 @@ public class ConfigManager {
         loadedMessages.update();
         loadedMessages.save();
 
+        String limboName = loadedConfig.getString(Route.from("limbo-name"));
+        String directConnectServerName = loadedConfig.getString(Route.from("direct-connect-server"));
+        if (limboName == null || limboName.isBlank()
+                || directConnectServerName == null || directConnectServerName.isBlank()
+                || !serverValidator.test(limboName, directConnectServerName)) {
+            throw new IOException("Configured limbo or direct-connect server is not registered in Velocity");
+        }
+
         Snapshot freshSnapshot = new Snapshot(
                 loadedConfig,
                 loadedMessages,
@@ -72,8 +86,8 @@ public class ConfigManager {
                 loadedMessages.getString(Route.from("queuePositionJoin")),
                 loadedMessages.getString(Route.from("welcomeMessage")),
                 loadedMessages.getString(Route.from("commandBlocked")),
-                loadedConfig.getString(Route.from("limbo-name")),
-                loadedConfig.getString(Route.from("direct-connect-server")),
+                limboName,
+                directConnectServerName,
                 bounded("task-interval", loadedConfig.getInt("task-interval", 3_000),
                         MIN_TASK_INTERVAL_MILLIS, MAX_TASK_INTERVAL_MILLIS),
                 bounded("reconnect-batch-size", loadedConfig.getInt("reconnect-batch-size", 8),
