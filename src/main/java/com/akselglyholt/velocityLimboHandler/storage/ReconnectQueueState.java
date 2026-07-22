@@ -276,8 +276,9 @@ final class ReconnectQueueState {
     }
 
     private void removeStaleOwnership(String serverName, UUID playerId) {
-        queueByPlayer.remove(playerId, serverName);
-        staleEntryRemover.accept(playerId);
+        if (queueByPlayer.remove(playerId, serverName)) {
+            staleEntryRemover.accept(playerId);
+        }
     }
 
     private void removeServerQueueIfEmpty(String serverName, ServerQueue expectedQueue) {

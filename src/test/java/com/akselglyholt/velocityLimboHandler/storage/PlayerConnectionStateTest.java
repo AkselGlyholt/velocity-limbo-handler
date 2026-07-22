@@ -80,4 +80,15 @@ class PlayerConnectionStateTest {
         assertTrue(state.isConnecting(playerId));
         assertEquals("retrying", state.getConnectionIssue(playerId));
     }
+
+    @Test
+    void conditionalRemovalPreservesAReactivatedPlayer() {
+        PlayerConnectionState state = new PlayerConnectionState();
+        UUID playerId = UUID.randomUUID();
+        state.registerPlayer(playerId, "survival");
+
+        state.removePlayerStateIf(playerId, ignored -> false);
+
+        assertTrue(state.isRegistered(playerId));
+    }
 }

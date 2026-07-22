@@ -33,6 +33,10 @@ final class PlayerConnectionState {
         states.remove(playerId);
     }
 
+    void removePlayerStateIf(UUID playerId, Predicate<UUID> shouldRemove) {
+        states.computeIfPresent(playerId, (ignored, state) -> shouldRemove.test(playerId) ? null : state);
+    }
+
     boolean isConnecting(UUID playerId) {
         State state = states.get(playerId);
         return state != null && state.connecting;

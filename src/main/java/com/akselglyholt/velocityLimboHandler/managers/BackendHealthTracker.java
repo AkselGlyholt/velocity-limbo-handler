@@ -52,6 +52,13 @@ final class BackendHealthTracker {
     }
 
     void clear() {
+        states.values().forEach(state -> {
+            synchronized (state) {
+                if (state.inFlight != null) {
+                    state.inFlight.cancel(false);
+                }
+            }
+        });
         states.clear();
     }
 

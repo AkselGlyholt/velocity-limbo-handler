@@ -20,7 +20,10 @@ public class PlayerManager {
     }
 
     private final PlayerConnectionState connectionState = new PlayerConnectionState();
-    private final ReconnectQueueState reconnectQueueState = new ReconnectQueueState(this::removePlayerState, this::getActivePlayer);
+    private final ReconnectQueueState reconnectQueueState = new ReconnectQueueState(
+            this::removePlayerStateIfInactive,
+            this::getActivePlayer
+    );
     private final AtomicLong nextPruneAtNanos = new AtomicLong();
     private volatile String queuePositionMsg;
 
@@ -175,6 +178,10 @@ public class PlayerManager {
 
     private void removePlayerState(UUID playerId) {
         connectionState.removePlayerState(playerId);
+    }
+
+    private void removePlayerStateIfInactive(UUID playerId) {
+        connectionState.removePlayerStateIf(playerId, this::isInactiveOrMissing);
     }
 
     private Player getActivePlayer(UUID playerId) {
