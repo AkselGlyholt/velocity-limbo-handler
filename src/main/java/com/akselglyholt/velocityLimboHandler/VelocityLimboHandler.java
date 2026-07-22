@@ -144,6 +144,7 @@ public class VelocityLimboHandler {
     public void onShutdown(ProxyShutdownEvent event) {
         if (bstatsMetrics != null) bstatsMetrics.shutdown();
         if (reconnectHandler != null) reconnectHandler.close();
+        if (authManager != null) authManager.close();
         Utility.clearMaintenanceAdapter();
     }
 

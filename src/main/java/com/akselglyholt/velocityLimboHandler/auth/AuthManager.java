@@ -9,37 +9,36 @@ import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public final class AuthManager implements AutoCloseable {
-    private final ProxyServer proxy;
     private final ReconnectBlocker blocker;
-    private final List<AuthHandler> handlers = new ArrayList<>();
-    private AuthHandler active = new NoopHandler();
+    private final AuthHandler active;
 
     public AuthManager(Object plugin, ProxyServer proxy, ReconnectBlocker blocker) {
-        this.proxy = proxy;
         this.blocker = blocker;
-        // order matters if multiple are present
-        handlers.add(new LibreLoginHandler(proxy, blocker));
-        handlers.add(new LibreLoginNextHandler(proxy, blocker));
-        handlers.add(new NLoginHandler(proxy, blocker));
-        // add future handlers here
-        selectActive();
+        active = selectActive(proxy, blocker);
         proxy.getEventManager().register(plugin, PostLoginEvent.class, evt -> {
             Player p = evt.getPlayer();
             active.onPlayerJoin(p);
         });
     }
 
-    private void selectActive() {
-        for (var h : handlers) {
-            if (h.isActive()) {
-                active = h;
-                return;
-            }
+    private AuthHandler selectActive(ProxyServer proxy, ReconnectBlocker blocker) {
+        AuthHandler candidate = new LibreLoginHandler(proxy, blocker);
+        if (candidate.isActive()) {
+            return candidate;
         }
+
+        candidate = new LibreLoginNextHandler(proxy, blocker);
+        if (candidate.isActive()) {
+            return candidate;
+        }
+
+        candidate = new NLoginHandler(proxy, blocker);
+        if (candidate.isActive()) {
+            return candidate;
+        }
+
+        return new NoopHandler();
     }
 
     @Override
@@ -48,6 +47,6 @@ public final class AuthManager implements AutoCloseable {
     }
 
     public boolean isAuthBlocked(Player p) {
-        return this.blocker != null && blocker.isBlocked(p.getUniqueId());
+        return blocker != null && blocker.isBlocked(p.getUniqueId());
     }
 }
