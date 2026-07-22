@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 public class Utility {
     private static final MiniMessage miniMessage = MiniMessage.miniMessage();
@@ -72,8 +73,16 @@ public class Utility {
     }
 
     public static void logDebug(String message) {
-        if (VelocityLimboHandler.getConfigManager().isDebugEnabled()) {
+        var configManager = VelocityLimboHandler.getConfigManager();
+        if (configManager != null && configManager.isDebugEnabled()) {
             VelocityLimboHandler.getLogger().info("[DEBUG] " + message);
+        }
+    }
+
+    public static void logDebug(Supplier<String> messageSupplier) {
+        var configManager = VelocityLimboHandler.getConfigManager();
+        if (configManager != null && configManager.isDebugEnabled()) {
+            VelocityLimboHandler.getLogger().info("[DEBUG] " + messageSupplier.get());
         }
     }
 

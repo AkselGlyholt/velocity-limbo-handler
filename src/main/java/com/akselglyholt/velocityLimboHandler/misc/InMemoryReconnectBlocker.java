@@ -2,20 +2,20 @@ package com.akselglyholt.velocityLimboHandler.misc;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 public final class InMemoryReconnectBlocker implements ReconnectBlocker {
-    private final ConcurrentHashMap<UUID, Boolean> map = new ConcurrentHashMap<>();
+    private final Set<UUID> blockedPlayers = ConcurrentHashMap.newKeySet();
 
     @Override public void block(UUID id, String reason) {
-        map.put(id, Boolean.TRUE);
+        blockedPlayers.add(id);
     }
 
     @Override public void unblock(UUID id) {
-        map.remove(id);
+        blockedPlayers.remove(id);
     }
 
     @Override public boolean isBlocked(UUID id) {
-        return map.containsKey(id);
+        return blockedPlayers.contains(id);
     }
 }
-

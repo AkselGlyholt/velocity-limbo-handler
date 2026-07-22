@@ -36,7 +36,7 @@ public class ConnectionListener {
         if (VelocityLimboHandler.getPlayerManager().hasQueuedPlayers(intendedServer)) {
             event.setResult(ServerPreConnectEvent.ServerResult.allowed(limbo));
 
-            VelocityLimboHandler.getLogger().info(String.format("Rerouting %s to Limbo (Server %s is queued)",
+            Utility.logDebug(() -> String.format("Rerouting %s to Limbo (Server %s is queued)",
                     player.getUsername(), intendedServer.getServerInfo().getName()));
         }
     }
@@ -63,9 +63,9 @@ public class ConnectionListener {
         // Handle players who just joined Limbo
         if (Utility.doServerNamesMatch(currentServer, limbo)) {
             // Determine intended server from forced host if available
-            String virtualHost = player.getVirtualHost().map(InetSocketAddress::getHostName).orElse(null);
+            String virtualHost = player.getVirtualHost().map(InetSocketAddress::getHostString).orElse(null);
 
-            Utility.logDebug(String.format("%s landed on limbo (previousServer: %s, virtualHost: %s)",
+            Utility.logDebug(() -> String.format("%s landed on limbo (previousServer: %s, virtualHost: %s)",
                     player.getUsername(),
                     previousServer != null ? previousServer.getServerInfo().getName() : "none",
                     virtualHost != null ? virtualHost : "none"));
@@ -78,7 +78,7 @@ public class ConnectionListener {
                         .getForcedHosts()
                         .get(virtualHost);
 
-                Utility.logDebug(String.format("%s forced-host lookup for '%s': %s",
+                Utility.logDebug(() -> String.format("%s forced-host lookup for '%s': %s",
                         player.getUsername(), virtualHost,
                         forcedServers != null ? forcedServers.toString() : "no match"));
 
@@ -103,12 +103,14 @@ public class ConnectionListener {
                 } else {
                     intendedTarget = VelocityLimboHandler.getDirectConnectServer();
                 }
-                Utility.logDebug(String.format("%s no forced-host target resolved — falling back to '%s'",
-                        player.getUsername(), intendedTarget.getServerInfo().getName()));
+                RegisteredServer fallbackTarget = intendedTarget;
+                Utility.logDebug(() -> String.format("%s no forced-host target resolved — falling back to '%s'",
+                        player.getUsername(), fallbackTarget.getServerInfo().getName()));
             }
 
-            Utility.logDebug(String.format("%s will be queued for '%s'",
-                    player.getUsername(), intendedTarget.getServerInfo().getName()));
+            RegisteredServer queuedTarget = intendedTarget;
+            Utility.logDebug(() -> String.format("%s will be queued for '%s'",
+                    player.getUsername(), queuedTarget.getServerInfo().getName()));
 
             VelocityLimboHandler.getPlayerManager().addPlayer(player, intendedTarget);
         }

@@ -50,7 +50,7 @@ public class ReconnectHandler implements AutoCloseable {
 
         playerManager.setPlayerConnecting(player, true);
 
-        Utility.logDebug(String.format("Pinging %s for %s", previousServer.getServerInfo().getName(), player.getUsername()));
+        Utility.logDebug(() -> String.format("Pinging %s for %s", previousServer.getServerInfo().getName(), player.getUsername()));
         healthTracker.probe(previousServer).whenComplete((availability, probeThrowable) ->
                 handleProbeResult(player, previousServer, availability, probeThrowable)
         );
@@ -63,12 +63,12 @@ public class ReconnectHandler implements AutoCloseable {
         boolean connectionStarted = false;
         try {
             if (throwable != null || availability == null || !availability.reachable()) {
-                Utility.logDebug(String.format("Ping failed for %s — server likely offline",
+                Utility.logDebug(() -> String.format("Ping failed for %s — server likely offline",
                         server.getServerInfo().getName()));
                 return;
             }
             if (availability.full()) {
-                Utility.logDebug(String.format("Skipping reconnect for %s — %s reports no free slots",
+                Utility.logDebug(() -> String.format("Skipping reconnect for %s — %s reports no free slots",
                         player.getUsername(), server.getServerInfo().getName()));
                 return;
             }
@@ -76,7 +76,7 @@ public class ReconnectHandler implements AutoCloseable {
                 return;
             }
 
-            Utility.logInformational(String.format("Connecting %s to %s",
+            Utility.logDebug(() -> String.format("Connecting %s to %s",
                     player.getUsername(), server.getServerInfo().getName()));
             var connectionFuture = player.createConnectionRequest(server).connect();
             connectionStarted = true;
@@ -107,7 +107,7 @@ public class ReconnectHandler implements AutoCloseable {
             }
 
             if (result.isSuccessful()) {
-                Utility.logInformational(String.format("Successfully reconnected %s to %s",
+                Utility.logDebug(() -> String.format("Successfully reconnected %s to %s",
                         player.getUsername(), server.getServerInfo().getName()));
                 playerManager.removePlayerIssue(player);
                 return;

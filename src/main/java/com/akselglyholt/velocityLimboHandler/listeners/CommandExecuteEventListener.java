@@ -10,6 +10,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ServerConnection;
 
 import java.util.Optional;
+import java.util.Locale;
 
 public class CommandExecuteEventListener {
     private final CommandBlocker commandBlocker;
@@ -30,7 +31,8 @@ public class CommandExecuteEventListener {
 
         if (serverConnection.isPresent()) {
             String command = event.getCommand();
-            String commandName = command.split(" ")[0].toLowerCase(); // Extract command name
+            int separator = command.indexOf(' ');
+            String commandName = (separator < 0 ? command : command.substring(0, separator)).toLowerCase(Locale.ROOT);
 
             // Get the rule for this specific command
             CommandBlockRule rule = commandBlocker.getCommandRules().get(commandName);
