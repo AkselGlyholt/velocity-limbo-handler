@@ -6,7 +6,6 @@ import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import dev.dejvokep.boostedyaml.route.Route;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.util.List;
 import java.util.Map;
@@ -22,7 +21,6 @@ public class PlayerManager {
 
     private final PlayerConnectionState connectionState = new PlayerConnectionState();
     private final ReconnectQueueState reconnectQueueState = new ReconnectQueueState(this::removePlayerState, this::getActivePlayer);
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final AtomicLong nextPruneAtNanos = new AtomicLong();
     private static String queuePositionMsg;
 
@@ -64,8 +62,7 @@ public class PlayerManager {
 
         if (VelocityLimboHandler.isQueueEnabled()) {
             reconnectQueueState.enqueue(player, registeredServer);
-            String formattedMessage = MessageFormatter.formatMessage(queuePositionMsg, player);
-            player.sendMessage(miniMessage.deserialize(formattedMessage));
+            player.sendMessage(MessageFormatter.formatComponent(queuePositionMsg, player));
         }
     }
 

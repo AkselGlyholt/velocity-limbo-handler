@@ -20,6 +20,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Utility {
     private static final MiniMessage miniMessage = MiniMessage.miniMessage();
     private static final String welcomeMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("welcomeMessage"));
+    private static final Component AFK_MESSAGE = miniMessage.deserialize(
+            "<yellow>⏳ You were inactive for too long and moved to Limbo.</yellow>\n"
+                    + "<gray>You will be reconnected when you interact with the game.</gray>"
+    );
+    private static final Component SERVER_RESTART_MESSAGE = miniMessage.deserialize(
+            "<red>🔄 The server is restarting, so you have been moved to Limbo.</red>\n"
+                    + "<gray>You will be reconnected automatically when the server is back.</gray>"
+    );
+    private static final Component CONNECTION_ISSUE_MESSAGE = miniMessage.deserialize(
+            "<dark_red>⚠ You had connection issues and were placed in Limbo.</dark_red>\n"
+                    + "<gray>Try reconnecting or wait for a stable connection.</gray>"
+    );
     private static final Object MAINTENANCE_ADAPTER_LOCK = new Object();
     private static volatile MaintenanceAdapter maintenanceAdapter;
 
@@ -33,16 +45,10 @@ public class Utility {
         if (reason == null) reason = "unknown";
 
         Component message = switch (reason.toLowerCase()) {
-            case "afk" ->
-                    miniMessage.deserialize("<yellow>⏳ You were inactive for too long and moved to Limbo.</yellow>\n" +
-                            "<gray>You will be reconnected when you interact with the game.</gray>");
-            case "server-restart" ->
-                    miniMessage.deserialize("<red>🔄 The server is restarting, so you have been moved to Limbo.</red>\n" +
-                            "<gray>You will be reconnected automatically when the server is back.</gray>");
-            case "connection-issue" ->
-                    miniMessage.deserialize("<dark_red>⚠ You had connection issues and were placed in Limbo.</dark_red>\n" +
-                            "<gray>Try reconnecting or wait for a stable connection.</gray>");
-            default -> miniMessage.deserialize(MessageFormatter.formatMessage(welcomeMsg, player));
+            case "afk" -> AFK_MESSAGE;
+            case "server-restart" -> SERVER_RESTART_MESSAGE;
+            case "connection-issue" -> CONNECTION_ISSUE_MESSAGE;
+            default -> MessageFormatter.formatComponent(welcomeMsg, player);
         };
 
         player.sendMessage(message);

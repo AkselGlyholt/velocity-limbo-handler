@@ -1,5 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.config;
 
+import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
+
 import dev.dejvokep.boostedyaml.YamlDocument;
 import dev.dejvokep.boostedyaml.dvs.versioning.BasicVersioning;
 import dev.dejvokep.boostedyaml.route.Route;
@@ -71,6 +73,7 @@ public class ConfigManager {
         messageConfig.save();
 
         cacheValues();
+        MessageFormatter.clearCache();
     }
 
     private void cacheValues() {

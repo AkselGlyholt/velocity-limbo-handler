@@ -7,7 +7,6 @@ import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.util.ArrayDeque;
 import java.util.HashMap;
@@ -20,7 +19,6 @@ public class QueueNotifierTask implements Runnable {
     private final RegisteredServer limboServer;
     private final PlayerManager playerManager;
     private final ConfigManager configManager;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final ArrayDeque<UUID> pendingPlayers = new ArrayDeque<>();
     private long nextCycleAtNanos;
     private long nextDispatchAtNanos;
@@ -80,13 +78,9 @@ public class QueueNotifierTask implements Runnable {
         if (issue != null) {
 
             if ("banned".equals(issue)) {
-                String formatedMsg = MessageFormatter.formatMessage(configManager.getBannedMsg(), player);
-
-                player.sendMessage(miniMessage.deserialize(formatedMsg));
+                player.sendMessage(MessageFormatter.formatComponent(configManager.getBannedMsg(), player));
             } else if ("not_whitelisted".equals(issue)) {
-                String formatedMsg = MessageFormatter.formatMessage(configManager.getWhitelistedMsg(), player);
-
-                player.sendMessage(miniMessage.deserialize(formatedMsg));
+                player.sendMessage(MessageFormatter.formatComponent(configManager.getWhitelistedMsg(), player));
             }
             return;
         }
@@ -95,9 +89,9 @@ public class QueueNotifierTask implements Runnable {
         String serverName = previousServer.getServerInfo().getName();
 
         if (maintenanceCache.computeIfAbsent(serverName, Utility::isServerInMaintenance)) {
-            String formatedMsg = MessageFormatter.formatMessage(configManager.getMaintenanceModeMsg(), player);
-
-            player.sendMessage(miniMessage.deserialize(formatedMsg));
+            player.sendMessage(MessageFormatter.formatComponent(
+                    configManager.getMaintenanceModeMsg(), player, null, previousServer
+            ));
             return;
         }
 
@@ -105,8 +99,8 @@ public class QueueNotifierTask implements Runnable {
 
         int position = playerManager.getQueuePosition(player);
         if (position == -1) return;
-        String formatedQueuePositionMsg = MessageFormatter.formatMessage(configManager.getQueuePositionMsg(), player);
-
-        player.sendMessage(miniMessage.deserialize(formatedQueuePositionMsg));
+        player.sendMessage(MessageFormatter.formatComponent(
+                configManager.getQueuePositionMsg(), player, position, previousServer
+        ));
     }
 }

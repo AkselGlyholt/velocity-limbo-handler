@@ -13,7 +13,6 @@ import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.TranslationArgument;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.util.List;
@@ -25,7 +24,6 @@ public class ReconnectHandler implements AutoCloseable {
     private final AuthManager authManager;
     private final ConfigManager configManager;
     private final Logger logger;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final BackendHealthTracker healthTracker;
 
     public ReconnectHandler(PlayerManager playerManager, AuthManager authManager, ConfigManager configManager, Logger logger) {
@@ -159,7 +157,7 @@ public class ReconnectHandler implements AutoCloseable {
         if (reason instanceof TranslatableComponent translatable) {
             String key = translatable.key();
             if (key.contains("banned")) {
-                Component message = miniMessage.deserialize(MessageFormatter.formatMessage(configManager.getBannedMsg(), player));
+                Component message = MessageFormatter.formatComponent(configManager.getBannedMsg(), player);
                 Optional<Component> banReason = extractBanReason(translatable);
                 if (banReason.isPresent()) {
                     message = message.append(Component.newline())
@@ -172,7 +170,7 @@ public class ReconnectHandler implements AutoCloseable {
                 return true;
             }
             if (key.contains("not_whitelisted")) {
-                player.sendMessage(miniMessage.deserialize(MessageFormatter.formatMessage(configManager.getWhitelistedMsg(), player)));
+                player.sendMessage(MessageFormatter.formatComponent(configManager.getWhitelistedMsg(), player));
                 playerManager.addPlayerWithIssue(player, "not_whitelisted");
                 playerManager.removePlayerFromQueue(player);
                 return true;
@@ -180,7 +178,7 @@ public class ReconnectHandler implements AutoCloseable {
         }
 
         if (reason instanceof TextComponent textComponent && textComponent.content().toLowerCase().contains("whitelist")) {
-            player.sendMessage(miniMessage.deserialize(MessageFormatter.formatMessage(configManager.getWhitelistedMsg(), player)));
+            player.sendMessage(MessageFormatter.formatComponent(configManager.getWhitelistedMsg(), player));
             playerManager.addPlayerWithIssue(player, "not_whitelisted");
             playerManager.removePlayerFromQueue(player);
             return true;
