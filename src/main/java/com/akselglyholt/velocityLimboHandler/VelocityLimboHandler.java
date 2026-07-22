@@ -96,22 +96,6 @@ public class VelocityLimboHandler {
 
     @Subscribe
     public void onInitialize(ProxyInitializeEvent event) {
-        // Initialize Metrics
-        int pluginId = 26682;
-        bstatsMetrics = metricsFactory.make(this, pluginId);
-
-        // Metric for players inside the limbo
-        bstatsMetrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
-            @Override
-            public Integer call() {
-                return limboServer != null ? limboServer.getPlayersConnected().size() : 0;
-            }
-        }));
-
-        // Initialize Managers
-        authManager = new AuthManager(this, proxyServer, reconnectBlocker);
-        reconnectHandler = new ReconnectHandler(playerManager, authManager, configManager, logger);
-
         logger.info("Loading Limbo Handler!");
 
         EventManager eventManger = proxyServer.getEventManager();
@@ -122,11 +106,23 @@ public class VelocityLimboHandler {
         limboServer = Utility.getServerByName(limboName);
         directConnectServer = Utility.getServerByName(directConnectName);
 
-        // If either server is null, "self-destruct"
+        // A server can disappear after constructor-time validation if Velocity's registry changes.
         if (limboServer == null || directConnectServer == null) {
-            eventManger.unregisterListeners(this);
             return;
         }
+
+        // Initialize metrics and managers only after all required runtime dependencies exist.
+        int pluginId = 26682;
+        bstatsMetrics = metricsFactory.make(this, pluginId);
+        bstatsMetrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return limboServer.getPlayersConnected().size();
+            }
+        }));
+
+        authManager = new AuthManager(this, proxyServer, reconnectBlocker);
+        reconnectHandler = new ReconnectHandler(playerManager, authManager, configManager, logger);
 
         eventManger.register(this, new ConnectionListener());
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker, configManager));
