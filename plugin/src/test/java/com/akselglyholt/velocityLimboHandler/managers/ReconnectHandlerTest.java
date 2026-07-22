@@ -111,7 +111,7 @@ class ReconnectHandlerTest {
     }
 
     @Test
-    void connectionInProgressPreservesLegacyConnectingState() {
+    void connectionInProgressReleasesLegacyConnectingState() {
         ConnectionRequestBuilder request = mock(ConnectionRequestBuilder.class);
         ConnectionRequestBuilder.Result result = mock(ConnectionRequestBuilder.Result.class);
         when(healthTracker.probe(server)).thenReturn(
@@ -124,11 +124,11 @@ class ReconnectHandlerTest {
         assertTrue(reconnectHandler.reconnectPlayer(player));
 
         verify(playerManager).setPlayerConnecting(player, true);
-        verify(playerManager, never()).setPlayerConnecting(player, false);
+        verify(playerManager).setPlayerConnecting(player, false);
     }
 
     @Test
-    void connectionInProgressPreservesApiClaim() {
+    void connectionInProgressReleasesApiClaim() {
         ConnectionRequestBuilder request = mock(ConnectionRequestBuilder.class);
         ConnectionRequestBuilder.Result result = mock(ConnectionRequestBuilder.Result.class);
         when(playerManager.usesApiLifecycle()).thenReturn(true);
@@ -142,7 +142,7 @@ class ReconnectHandlerTest {
 
         assertTrue(reconnectHandler.reconnectPlayer(player));
 
-        verify(playerManager, never()).finishConnectionAttempt(
+        verify(playerManager).finishConnectionAttempt(
                 player, "survival", ReconnectOutcome.CONNECTION_IN_PROGRESS, null
         );
     }

@@ -144,7 +144,8 @@ import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
 
 VelocityLimboApi api = VelocityLimboApi.get(proxyServer);
-LimboController limbo = api.controllerFor(this); // validated loaded plugin instance
+// Run this during or after ProxyInitializeEvent; plugin instances are not registered in constructors.
+LimboController limbo = api.controllerFor(this);
 
 HoldResult deployHold = limbo.holdServer("survival", new HoldRequest("rolling deploy"));
 

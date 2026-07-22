@@ -178,9 +178,10 @@ public class ReconnectHandler implements AutoCloseable {
             failure = exception.getMessage();
             logger.warning("Failed to process reconnect result for " + player.getUsername() + ": " + exception.getMessage());
         } finally {
-            if (outcome != ReconnectOutcome.CONNECTION_IN_PROGRESS) {
-                finishAttempt(player, server, outcome, failure, apiLifecycle);
-            }
+            // CONNECTION_IN_PROGRESS means this request did not take ownership of the
+            // other in-flight connection. Release our local claim so a failed/cancelled
+            // external request cannot strand the player in CONNECTING forever.
+            finishAttempt(player, server, outcome, failure, apiLifecycle);
         }
     }
 

@@ -28,6 +28,9 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import java.time.Duration;
@@ -45,6 +48,7 @@ import static org.mockito.Mockito.mockStatic;
 import org.mockito.MockedStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -141,6 +145,55 @@ class VelocityLimboApiImplTest {
         assertEquals(HoldStatus.ACQUIRED, hold.status());
         assertTrue(api.queue("survival").serverHeld());
         verify(playerManager, never()).removePlayerFromQueue(any());
+    }
+
+    @Test
+    void timedHoldsShareOneSchedulerTaskAndIndexesCountDistinctTargets() {
+        LimboController controller = controller(new Object(), "example");
+        managePlayer();
+
+        controller.holdServer("survival", new HoldRequest("first deploy", Duration.ofMinutes(1)));
+        controller.holdServer("survival", new HoldRequest("second deploy", Duration.ofMinutes(2)));
+        controller.holdPlayer(playerId, new HoldRequest("profile sync", Duration.ofMinutes(3)));
+
+        assertEquals(1, api.heldServerCount());
+        assertEquals(1, api.heldPlayerCount());
+        verify(proxy.getScheduler(), times(1)).buildTask(any(), any(Runnable.class));
+
+        assertEquals(3, controller.releaseAllHolds());
+        assertEquals(0, api.heldServerCount());
+        assertEquals(0, api.heldPlayerCount());
+    }
+
+    @Test
+    void queuePermissionChecksDoNotBlockHoldMutations() throws Exception {
+        LimboController controller = controller(new Object(), "example");
+        managePlayer();
+        when(playerManager.getQueueForServer("survival"))
+                .thenReturn(java.util.List.of(new PlayerManager.QueuedPlayer(playerId, "Tester")));
+
+        CountDownLatch permissionCheckStarted = new CountDownLatch(1);
+        CountDownLatch releasePermissionCheck = new CountDownLatch(1);
+        when(player.hasPermission(any(String.class))).thenAnswer(ignored -> {
+            permissionCheckStarted.countDown();
+            releasePermissionCheck.await(5, TimeUnit.SECONDS);
+            return false;
+        });
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var queueFuture = executor.submit(() -> api.queue("survival"));
+            assertTrue(permissionCheckStarted.await(2, TimeUnit.SECONDS));
+
+            var holdFuture = executor.submit(() -> controller.holdServer("survival", new HoldRequest("deploy")));
+            assertEquals(HoldStatus.ACQUIRED, holdFuture.get(2, TimeUnit.SECONDS).status());
+
+            releasePermissionCheck.countDown();
+            assertEquals(1, queueFuture.get(2, TimeUnit.SECONDS).players().size());
+        } finally {
+            releasePermissionCheck.countDown();
+            executor.shutdownNow();
+        }
     }
 
     @Test
