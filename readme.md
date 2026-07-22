@@ -51,9 +51,14 @@ Made to work with [LOOHP's Limbo](https://github.com/LOOHP/Limbo) server, but an
 limbo-name: "limbo"                  # The name of your limbo server
 direct-connect-server: "lobby"       # Where to send direct connections
 task-interval: 3000                  # Queue processing interval (milliseconds)
+reconnect-batch-size: 8              # Maximum backend queues checked per processing run
 queue-notify-interval: 30            # How often to tell players their position
+queue-notify-batch-size: 64          # Maximum due notifications sent per dispatcher tick
 disabled-commands: ["server","hub"]  # Commands blocked in limbo
 ```
+
+The batch limits smooth work across scheduler ticks. Increase them for faster catch-up on very large
+networks, or lower them to cap short CPU bursts on constrained proxies.
 
 👉 Messages can be tweaked in `messages.yml` so your players see exactly what you want.
 
