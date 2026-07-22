@@ -8,7 +8,6 @@ import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
-import com.velocitypowered.api.proxy.server.ServerPing;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.TranslatableComponent;
@@ -21,18 +20,25 @@ import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 
-public class ReconnectHandler {
+public class ReconnectHandler implements AutoCloseable {
     private final PlayerManager playerManager;
     private final AuthManager authManager;
     private final ConfigManager configManager;
     private final Logger logger;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
+    private final BackendHealthTracker healthTracker;
 
     public ReconnectHandler(PlayerManager playerManager, AuthManager authManager, ConfigManager configManager, Logger logger) {
+        this(playerManager, authManager, configManager, logger, new BackendHealthTracker());
+    }
+
+    ReconnectHandler(PlayerManager playerManager, AuthManager authManager, ConfigManager configManager, Logger logger,
+                     BackendHealthTracker healthTracker) {
         this.playerManager = playerManager;
         this.authManager = authManager;
         this.configManager = configManager;
         this.logger = logger;
+        this.healthTracker = healthTracker;
     }
 
     public boolean reconnectPlayer(Player player) {
@@ -46,93 +52,98 @@ public class ReconnectHandler {
 
         playerManager.setPlayerConnecting(player, true);
 
-        // If enabled, check if a server responds to pings before connecting, asynchronously
         Utility.logDebug(String.format("Pinging %s for %s", previousServer.getServerInfo().getName(), player.getUsername()));
-        previousServer.ping().whenComplete((ping, throwable) -> {
-            if (throwable != null || ping == null) {
-                Utility.logDebug(String.format("Ping failed for %s (%s) — server likely offline",
-                        previousServer.getServerInfo().getName(),
-                        throwable != null ? throwable.getMessage() : "null ping"));
-                playerManager.setPlayerConnecting(player, false);
-                return; // Server offline
-            }
-
-            // Check if the server is full (skip if the server doesn't report player counts)
-            if (ping.getPlayers().isPresent()) {
-                ServerPing.Players serverPlayers = ping.getPlayers().get();
-                int maxPlayers = serverPlayers.getMax();
-                int onlinePlayers = serverPlayers.getOnline();
-
-                Utility.logDebug(String.format("Ping OK for %s: %d/%d players",
-                        previousServer.getServerInfo().getName(), onlinePlayers, maxPlayers));
-
-                if (maxPlayers <= onlinePlayers) {
-                    Utility.logDebug(String.format("Skipping reconnect for %s — %s is full (%d/%d)",
-                            player.getUsername(), previousServer.getServerInfo().getName(), onlinePlayers, maxPlayers));
-                    playerManager.setPlayerConnecting(player, false);
-                    return;
-                }
-            } else {
-                Utility.logDebug(String.format("Ping OK for %s: player count not reported (hide-online-players?), proceeding",
-                        previousServer.getServerInfo().getName()));
-            }
-
-            // Check if maintenance mode is enabled on Backend Server
-            if (Utility.isServerInMaintenance(previousServer.getServerInfo().getName())) {
-                // Check if the user has bypass permission for Maintenance or is admin
-                if (player.hasPermission("maintenance.admin")
-                        || player.hasPermission("maintenance.bypass")
-                        || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())
-                        || Utility.playerMaintenanceWhitelisted(player)) {
-                    logger.info("[Maintenance Bypass] " + player.getUsername() + " bypassed queue to join " + previousServer.getServerInfo().getName());
-                } else {
-                    playerManager.setPlayerConnecting(player, false);
-                    return;
-                }
-            }
-
-            Utility.logInformational(String.format("Connecting %s to %s", player.getUsername(), previousServer.getServerInfo().getName()));
-
-            player.createConnectionRequest(previousServer).connect().whenComplete(((result, connectionThrowable) -> {
-                playerManager.setPlayerConnecting(player, false);
-
-                if (result.isSuccessful()) {
-                    Utility.logInformational(String.format("Successfully reconnected %s to %s", player.getUsername(), previousServer.getServerInfo().getName()));
-                    playerManager.removePlayerIssue(player);
-                    return;
-                }
-
-                if (result.getStatus() == ConnectionRequestBuilder.Status.CONNECTION_IN_PROGRESS) return;
-
-                if (configManager.isConnectionWarningsEnabled()) {
-                    Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s",
-                            player.getUsername(),
-                            previousServer.getServerInfo().getName(),
-                            result.getStatus()));
-                }
-
-                if (result.getStatus() == ConnectionRequestBuilder.Status.SERVER_DISCONNECTED) {
-                    Optional<Component> reasonOpt = result.getReasonComponent();
-                    if (reasonOpt.isPresent()) {
-                        Component reason = reasonOpt.get();
-                        if (!playerConnectIssue(player, reason)) {
-                            String plainReason = PlainTextComponentSerializer.plainText().serialize(reason);
-                            player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + plainReason + "</red>"));
-                        }
-                    }
-                    return;
-                }
-
-                if (connectionThrowable != null) {
-                    String errorMessage = connectionThrowable.getMessage();
-                    if (errorMessage != null && !errorMessage.isEmpty()) {
-                        player.sendMessage(miniMessage.deserialize("<red>❌ Failed to connect: " + errorMessage + "</red>"));
-                    }
-                }
-            }));
-        });
+        healthTracker.probe(previousServer).whenComplete((availability, probeThrowable) ->
+                handleProbeResult(player, previousServer, availability, probeThrowable)
+        );
 
         return true;
+    }
+
+    private void handleProbeResult(Player player, RegisteredServer server,
+                                   BackendHealthTracker.Availability availability, Throwable throwable) {
+        boolean connectionStarted = false;
+        try {
+            if (throwable != null || availability == null || !availability.reachable()) {
+                Utility.logDebug(String.format("Ping failed for %s — server likely offline",
+                        server.getServerInfo().getName()));
+                return;
+            }
+            if (availability.full()) {
+                Utility.logDebug(String.format("Skipping reconnect for %s — %s reports no free slots",
+                        player.getUsername(), server.getServerInfo().getName()));
+                return;
+            }
+            if (!player.isActive()) {
+                return;
+            }
+
+            Utility.logInformational(String.format("Connecting %s to %s",
+                    player.getUsername(), server.getServerInfo().getName()));
+            var connectionFuture = player.createConnectionRequest(server).connect();
+            connectionStarted = true;
+            connectionFuture.whenComplete((result, connectionThrowable) ->
+                    handleConnectionResult(player, server, result, connectionThrowable)
+            );
+        } catch (RuntimeException exception) {
+            healthTracker.invalidate(server.getServerInfo().getName());
+            logger.warning("Failed to start reconnect for " + player.getUsername() + ": " + exception.getMessage());
+        } finally {
+            if (!connectionStarted) {
+                playerManager.setPlayerConnecting(player, false);
+            }
+        }
+    }
+
+    private void handleConnectionResult(Player player, RegisteredServer server,
+                                        ConnectionRequestBuilder.Result result, Throwable throwable) {
+        try {
+            if (throwable != null || result == null) {
+                healthTracker.invalidate(server.getServerInfo().getName());
+                if (configManager.isConnectionWarningsEnabled()) {
+                    logger.warning("Connection failed for " + player.getUsername() + " to "
+                            + server.getServerInfo().getName() + ": "
+                            + (throwable == null ? "empty result" : throwable.getMessage()));
+                }
+                return;
+            }
+
+            if (result.isSuccessful()) {
+                Utility.logInformational(String.format("Successfully reconnected %s to %s",
+                        player.getUsername(), server.getServerInfo().getName()));
+                playerManager.removePlayerIssue(player);
+                return;
+            }
+
+            if (result.getStatus() == ConnectionRequestBuilder.Status.CONNECTION_IN_PROGRESS) {
+                return;
+            }
+
+            if (configManager.isConnectionWarningsEnabled()) {
+                Utility.logInformational(String.format("Connection failed for %s to %s. Result status: %s",
+                        player.getUsername(), server.getServerInfo().getName(), result.getStatus()));
+            }
+
+            if (result.getStatus() == ConnectionRequestBuilder.Status.SERVER_DISCONNECTED) {
+                Optional<Component> reasonOpt = result.getReasonComponent();
+                if (reasonOpt.isPresent()) {
+                    Component reason = reasonOpt.get();
+                    if (!playerConnectIssue(player, reason)) {
+                        String plainReason = PlainTextComponentSerializer.plainText().serialize(reason);
+                        player.sendMessage(Component.text("❌ Failed to connect: " + plainReason, NamedTextColor.RED));
+                    }
+                }
+            }
+        } catch (RuntimeException exception) {
+            logger.warning("Failed to process reconnect result for " + player.getUsername() + ": " + exception.getMessage());
+        } finally {
+            playerManager.setPlayerConnecting(player, false);
+        }
+    }
+
+    @Override
+    public void close() {
+        healthTracker.clear();
     }
 
     private Optional<Component> extractBanReason(TranslatableComponent component) {
