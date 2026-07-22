@@ -141,6 +141,7 @@ public class VelocityLimboHandler {
 
     @Subscribe
     public void onShutdown(ProxyShutdownEvent event) {
+        cancelScheduledTasks();
         if (bstatsMetrics != null) bstatsMetrics.shutdown();
         if (reconnectHandler != null) reconnectHandler.close();
         if (authManager != null) authManager.close();
@@ -148,15 +149,7 @@ public class VelocityLimboHandler {
     }
 
     public synchronized void reloadTasks() {
-        if (reconnectionTask != null) {
-            reconnectionTask.cancel();
-            reconnectionTask = null;
-        }
-
-        if (queueNotifierTask != null) {
-            queueNotifierTask.cancel();
-            queueNotifierTask = null;
-        }
+        cancelScheduledTasks();
 
         String limboName = configManager.getLimboName();
         String directConnectName = configManager.getDirectConnectServerName();
@@ -175,6 +168,18 @@ public class VelocityLimboHandler {
                 .buildTask(this, new QueueNotifierTask(proxyServer, limboServer, playerManager, configManager))
                 .repeat(1, TimeUnit.SECONDS)
                 .schedule();
+    }
+
+    private synchronized void cancelScheduledTasks() {
+        if (reconnectionTask != null) {
+            reconnectionTask.cancel();
+            reconnectionTask = null;
+        }
+
+        if (queueNotifierTask != null) {
+            queueNotifierTask.cancel();
+            queueNotifierTask = null;
+        }
     }
 
     public synchronized void applyReloadedConfiguration() {
