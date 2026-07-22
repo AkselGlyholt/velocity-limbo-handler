@@ -106,7 +106,8 @@ final class ServerQueue {
                 }
             }
 
-            if (removeStaleIfUnchanged(snapshot.version(), staleEntries) == VERSION_MISMATCH) {
+            long snapshotVersion = removeStaleIfUnchanged(snapshot.version(), staleEntries);
+            if (snapshotVersion == VERSION_MISMATCH) {
                 continue;
             }
 
@@ -170,9 +171,9 @@ final class ServerQueue {
         }
     }
 
-    Player findFirstActiveMatching(Function<UUID, Player> activePlayerResolver,
-                                   Consumer<UUID> staleEntryRemover,
-                                   Predicate<Player> matcher) {
+    MatchSnapshot findFirstActiveMatching(Function<UUID, Player> activePlayerResolver,
+                                          Consumer<UUID> staleEntryRemover,
+                                          Predicate<Player> matcher) {
         Objects.requireNonNull(activePlayerResolver, "activePlayerResolver");
         Objects.requireNonNull(staleEntryRemover, "staleEntryRemover");
         Objects.requireNonNull(matcher, "matcher");
@@ -192,12 +193,13 @@ final class ServerQueue {
                 }
             }
 
-            if (removeStaleIfUnchanged(snapshot.version(), staleEntries) == VERSION_MISMATCH) {
+            long snapshotVersion = removeStaleIfUnchanged(snapshot.version(), staleEntries);
+            if (snapshotVersion == VERSION_MISMATCH) {
                 continue;
             }
 
             staleEntries.forEach(staleEntryRemover);
-            return matchedPlayer;
+            return new MatchSnapshot(snapshotVersion, matchedPlayer);
         }
     }
 
@@ -329,6 +331,9 @@ final class ServerQueue {
     }
 
     record PositionSnapshot(long version, Map<UUID, Integer> positions) {
+    }
+
+    record MatchSnapshot(long version, Player player) {
     }
 
     private record HeadSnapshot(long version, UUID playerId, QueueTier tier) {

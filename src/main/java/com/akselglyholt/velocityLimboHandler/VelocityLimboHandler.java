@@ -146,6 +146,7 @@ public class VelocityLimboHandler {
     @Subscribe
     public void onShutdown(ProxyShutdownEvent event) {
         if (bstatsMetrics != null) bstatsMetrics.shutdown();
+        Utility.clearMaintenanceAdapter();
     }
 
     public synchronized void reloadTasks() {

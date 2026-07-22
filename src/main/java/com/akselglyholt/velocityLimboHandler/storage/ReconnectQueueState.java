@@ -17,10 +17,12 @@ import java.util.function.Function;
 
 final class ReconnectQueueState {
     private static final long POSITION_CACHE_TTL_NANOS = TimeUnit.SECONDS.toNanos(1);
+    private static final long MAINTENANCE_CANDIDATE_TTL_NANOS = TimeUnit.SECONDS.toNanos(5);
 
     private final Map<String, ServerQueue> reconnectQueues = new ConcurrentHashMap<>();
     private final Map<UUID, String> queueByPlayer = new ConcurrentHashMap<>();
     private final Map<String, QueuePositionCacheEntry> queuePositionCache = new ConcurrentHashMap<>();
+    private final Map<String, MaintenanceCandidateCacheEntry> maintenanceCandidateCache = new ConcurrentHashMap<>();
     private final Consumer<UUID> staleEntryRemover;
     private final Function<UUID, Player> activePlayerResolver;
 
@@ -165,20 +167,45 @@ final class ReconnectQueueState {
             return null;
         }
 
-        long beforeVersion = serverQueue.version();
-        Player maintenanceAllowed = serverQueue.findFirstActiveMatching(
+        long now = System.nanoTime();
+        long version = serverQueue.version();
+        MaintenanceCandidateCacheEntry cached = maintenanceCandidateCache.get(serverName);
+        if (cached != null && cached.version() == version && now < cached.expiresAtNanos()) {
+            if (cached.playerId() == null) {
+                return null;
+            }
+            Player cachedPlayer = getActivePlayer(cached.playerId());
+            if (cachedPlayer != null && isMaintenanceAllowed(cachedPlayer, serverName)) {
+                return cachedPlayer;
+            }
+            maintenanceCandidateCache.remove(serverName, cached);
+        }
+
+        long beforeVersion = version;
+        ServerQueue.MatchSnapshot match = serverQueue.findFirstActiveMatching(
                 this::getActivePlayer,
                 playerId -> removeStaleOwnership(serverName, playerId),
-                player -> player.hasPermission("maintenance.admin")
-                        || player.hasPermission("maintenance.bypass")
-                        || player.hasPermission("maintenance.singleserver.bypass." + serverName)
-                        || Utility.playerMaintenanceWhitelisted(player)
+                player -> isMaintenanceAllowed(player, serverName)
         );
         if (serverQueue.version() != beforeVersion) {
             invalidatePositionCache(serverName);
         }
 
+        Player maintenanceAllowed = match.player();
+        maintenanceCandidateCache.put(serverName, new MaintenanceCandidateCacheEntry(
+                match.version(),
+                now + MAINTENANCE_CANDIDATE_TTL_NANOS,
+                maintenanceAllowed == null ? null : maintenanceAllowed.getUniqueId()
+        ));
+
         return maintenanceAllowed;
+    }
+
+    private boolean isMaintenanceAllowed(Player player, String serverName) {
+        return player.hasPermission("maintenance.admin")
+                || player.hasPermission("maintenance.bypass")
+                || player.hasPermission("maintenance.singleserver.bypass." + serverName)
+                || Utility.playerMaintenanceWhitelisted(player);
     }
 
     private QueueTier getTier(Player player, String serverName) {
@@ -242,6 +269,7 @@ final class ReconnectQueueState {
         reconnectQueues.computeIfPresent(serverName, (ignored, serverQueue) -> {
             if (serverQueue.remove(playerId)) {
                 invalidatePositionCache(serverName);
+                maintenanceCandidateCache.remove(serverName);
             }
             return serverQueue.isEmpty() ? null : serverQueue;
         });
@@ -262,5 +290,8 @@ final class ReconnectQueueState {
     }
 
     private record QueuePositionCacheEntry(long version, long expiresAtNanos, Map<UUID, Integer> positions) {
+    }
+
+    private record MaintenanceCandidateCacheEntry(long version, long expiresAtNanos, UUID playerId) {
     }
 }

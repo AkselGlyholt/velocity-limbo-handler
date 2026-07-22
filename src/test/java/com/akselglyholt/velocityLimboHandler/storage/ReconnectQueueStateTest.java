@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ReconnectQueueStateTest {
@@ -100,6 +102,25 @@ class ReconnectQueueStateTest {
 
             state.removePlayer(whitelisted.getUniqueId());
             assertNull(state.findFirstMaintenanceAllowedPlayer(server));
+        }
+    }
+
+    @Test
+    void findFirstMaintenanceAllowedPlayer_cachesNoMatchByQueueVersion() {
+        Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
+        ReconnectQueueState state = new ReconnectQueueState(id -> {
+        }, activePlayers::get);
+        RegisteredServer server = mockServer("factions");
+        Player regular = mockPlayer(UUID.randomUUID(), "Regular", activePlayers);
+        state.enqueue(regular, server);
+
+        try (MockedStatic<Utility> mockedUtility = mockStatic(Utility.class)) {
+            mockedUtility.when(() -> Utility.playerMaintenanceWhitelisted(regular)).thenReturn(false);
+
+            assertNull(state.findFirstMaintenanceAllowedPlayer(server));
+            assertNull(state.findFirstMaintenanceAllowedPlayer(server));
+
+            verify(regular, times(1)).hasPermission("maintenance.admin");
         }
     }
 
