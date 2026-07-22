@@ -4,6 +4,7 @@ import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
+import com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome;
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -107,6 +108,43 @@ class ReconnectHandlerTest {
 
         verify(healthTracker).invalidate("survival");
         verify(playerManager).setPlayerConnecting(player, false);
+    }
+
+    @Test
+    void connectionInProgressPreservesLegacyConnectingState() {
+        ConnectionRequestBuilder request = mock(ConnectionRequestBuilder.class);
+        ConnectionRequestBuilder.Result result = mock(ConnectionRequestBuilder.Result.class);
+        when(healthTracker.probe(server)).thenReturn(
+                CompletableFuture.completedFuture(new BackendHealthTracker.Availability(true, false, 5))
+        );
+        when(player.createConnectionRequest(server)).thenReturn(request);
+        when(request.connect()).thenReturn(CompletableFuture.completedFuture(result));
+        when(result.getStatus()).thenReturn(ConnectionRequestBuilder.Status.CONNECTION_IN_PROGRESS);
+
+        assertTrue(reconnectHandler.reconnectPlayer(player));
+
+        verify(playerManager).setPlayerConnecting(player, true);
+        verify(playerManager, never()).setPlayerConnecting(player, false);
+    }
+
+    @Test
+    void connectionInProgressPreservesApiClaim() {
+        ConnectionRequestBuilder request = mock(ConnectionRequestBuilder.class);
+        ConnectionRequestBuilder.Result result = mock(ConnectionRequestBuilder.Result.class);
+        when(playerManager.usesApiLifecycle()).thenReturn(true);
+        when(playerManager.tryClaimConnection(player)).thenReturn(true);
+        when(healthTracker.probe(server)).thenReturn(
+                CompletableFuture.completedFuture(new BackendHealthTracker.Availability(true, false, 5))
+        );
+        when(player.createConnectionRequest(server)).thenReturn(request);
+        when(request.connect()).thenReturn(CompletableFuture.completedFuture(result));
+        when(result.getStatus()).thenReturn(ConnectionRequestBuilder.Status.CONNECTION_IN_PROGRESS);
+
+        assertTrue(reconnectHandler.reconnectPlayer(player));
+
+        verify(playerManager, never()).finishConnectionAttempt(
+                player, "survival", ReconnectOutcome.CONNECTION_IN_PROGRESS, null
+        );
     }
 
     @Test

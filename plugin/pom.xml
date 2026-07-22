@@ -52,11 +52,9 @@
     </dependencies>
 
     <build>
-        <sourceDirectory>${maven.multiModuleProjectDirectory}/src/main/java</sourceDirectory>
-        <testSourceDirectory>${maven.multiModuleProjectDirectory}/src/test/java</testSourceDirectory>
         <resources>
             <resource>
-                <directory>${maven.multiModuleProjectDirectory}/src/main/resources</directory>
+                <directory>${project.basedir}/src/main/resources</directory>
                 <filtering>true</filtering>
             </resource>
         </resources>
@@ -139,7 +137,7 @@
                         <configuration>
                             <outputDirectory>${project.build.directory}/generated-sources/version</outputDirectory>
                             <resources>
-                                <resource><directory>${maven.multiModuleProjectDirectory}/src/main/version-template</directory><filtering>true</filtering></resource>
+                                <resource><directory>${project.basedir}/src/main/version-template</directory><filtering>true</filtering></resource>
                             </resources>
                         </configuration>
                     </execution>
