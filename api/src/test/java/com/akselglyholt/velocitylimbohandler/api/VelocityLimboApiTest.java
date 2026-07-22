@@ -20,6 +20,11 @@ import static org.mockito.Mockito.when;
 
 class VelocityLimboApiTest {
     @Test
+    void getRejectsNullProxy() {
+        assertThrows(NullPointerException.class, () -> VelocityLimboApi.get(null));
+    }
+
+    @Test
     void getReturnsApiExposedByLoadedPluginInstance() {
         ProxyServer proxy = mock(ProxyServer.class);
         PluginManager plugins = mock(PluginManager.class);
@@ -42,6 +47,28 @@ class VelocityLimboApiTest {
         when(proxy.getPluginManager()).thenReturn(plugins);
         when(plugins.getPlugin(VelocityLimboApi.PLUGIN_ID)).thenReturn(Optional.of(container));
         doReturn(Optional.of(new Object())).when(container).getInstance();
+
+        assertThrows(IllegalStateException.class, () -> VelocityLimboApi.get(proxy));
+    }
+
+    @Test
+    void getRejectsMissingPlugin() {
+        ProxyServer proxy = mock(ProxyServer.class);
+        PluginManager plugins = mock(PluginManager.class);
+        when(proxy.getPluginManager()).thenReturn(plugins);
+        when(plugins.getPlugin(VelocityLimboApi.PLUGIN_ID)).thenReturn(Optional.empty());
+
+        assertThrows(IllegalStateException.class, () -> VelocityLimboApi.get(proxy));
+    }
+
+    @Test
+    void getRejectsPluginWithoutAnInstance() {
+        ProxyServer proxy = mock(ProxyServer.class);
+        PluginManager plugins = mock(PluginManager.class);
+        PluginContainer container = mock(PluginContainer.class);
+        when(proxy.getPluginManager()).thenReturn(plugins);
+        when(plugins.getPlugin(VelocityLimboApi.PLUGIN_ID)).thenReturn(Optional.of(container));
+        doReturn(Optional.empty()).when(container).getInstance();
 
         assertThrows(IllegalStateException.class, () -> VelocityLimboApi.get(proxy));
     }
