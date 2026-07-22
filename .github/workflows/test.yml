@@ -29,5 +29,16 @@ jobs:
         distribution: 'temurin'
         cache: maven
 
-    - name: Run Tests
-      run: mvn test -B
+    - name: Run reactor tests and install artifacts
+      run: mvn clean install -B
+
+    - name: Verify the API boundary
+      run: |
+        if jar tf api/target/velocity-limbo-handler-api-1.9.0.jar | grep -q 'velocityLimboHandler/api'; then
+          echo "API artifact contains implementation classes"
+          exit 1
+        fi
+        jar tf plugin/target/velocity-limbo-handler-1.9.0.jar | grep -q 'com/akselglyholt/velocitylimbohandler/api/VelocityLimboApi.class'
+
+    - name: Compile an external API consumer
+      run: mvn test -B -f .github/consumer-smoke/pom.xml

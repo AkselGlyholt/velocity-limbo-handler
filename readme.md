@@ -87,6 +87,74 @@ limbo = "limbo"
 
 ---
 
+## 🔌 Developer API v1
+
+VLH 1.9.0 exposes a Java 21 API for moving players into limbo atomically, applying owner-scoped
+player or server holds, retargeting managed players, reading immutable snapshots, and observing
+lifecycle events. The API is in-memory and intended for plugins running on the same Velocity proxy.
+
+Consumer plugins must declare VLH as a required Velocity dependency:
+
+```java
+@Plugin(
+    id = "my-plugin",
+    dependencies = @Dependency(id = "velocity-limbo-handler")
+)
+public final class MyPlugin { }
+```
+
+Use the API artifact as `compileOnly`/`provided`. Do **not** shade or relocate it: the implementation
+and API classes are already embedded in the installed VLH plugin JAR.
+
+### Gradle
+
+```kotlin
+repositories {
+    maven("https://jitpack.io")
+}
+
+dependencies {
+    compileOnly("com.github.AkselGlyholt.velocity-limbo-handler:velocity-limbo-handler-api:v1.9.0")
+}
+```
+
+### Maven
+
+```xml
+<repository>
+  <id>jitpack.io</id>
+  <url>https://jitpack.io</url>
+</repository>
+
+<dependency>
+  <groupId>com.github.AkselGlyholt.velocity-limbo-handler</groupId>
+  <artifactId>velocity-limbo-handler-api</artifactId>
+  <version>v1.9.0</version>
+  <scope>provided</scope>
+</dependency>
+```
+
+### Basic use
+
+```java
+VelocityLimboApi api = VelocityLimboApi.get(proxyServer);
+LimboController limbo = api.controllerFor(this); // validated loaded plugin instance
+
+HoldResult deployHold = limbo.holdServer("survival", new HoldRequest("rolling deploy"));
+
+limbo.enterLimbo(player,
+        EnterRequest.currentServer().withInitialHold(new HoldRequest("awaiting profile")))
+    .thenAccept(result -> logger.info("Limbo entry: " + result));
+```
+
+Each controller can release only its own opaque leases. The first player hold removes that player
+from the queue; releasing the final hold reevaluates permissions and appends them to the back of the
+appropriate `BYPASS`, `PRIORITY`, or `NORMAL` tier. Server holds preserve queue positions and block
+new attempts for everyone. Event objects are immutable and non-cancellable; query snapshots when
+you need current queue positions.
+
+---
+
 ## 🤝 Contributing
 
 Pull requests are welcome! Just follow the style already in place.

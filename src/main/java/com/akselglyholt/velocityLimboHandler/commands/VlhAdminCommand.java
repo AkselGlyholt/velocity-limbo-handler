@@ -131,6 +131,10 @@ public class VlhAdminCommand implements SimpleCommand {
         String queueEnabled = VelocityLimboHandler.isQueueEnabled() ? "<green>Enabled</green>" : "<red>Disabled</red>";
         int queuedServers = playerManager.getQueuedServerCount();
         int queuedPlayers = playerManager.getQueuedPlayerCount();
+        int heldPlayers = VelocityLimboHandler.getApiImplementation() == null
+                ? 0 : VelocityLimboHandler.getApiImplementation().heldPlayerCount();
+        int heldServers = VelocityLimboHandler.getApiImplementation() == null
+                ? 0 : VelocityLimboHandler.getApiImplementation().heldServerCount();
 
         source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
         send(source, "<gradient:#00D4FF:#7AF7C5><bold>Velocity Limbo Handler Status</bold></gradient>");
@@ -138,6 +142,8 @@ public class VlhAdminCommand implements SimpleCommand {
         send(source, "<gray>•</gray> <yellow>Queue System:</yellow> " + queueEnabled);
         send(source, "<gray>•</gray> <yellow>Queued Servers:</yellow> <white>" + queuedServers + "</white>");
         send(source, "<gray>•</gray> <yellow>Queued Players:</yellow> <white>" + queuedPlayers + "</white>");
+        send(source, "<gray>•</gray> <yellow>Held Players:</yellow> <white>" + heldPlayers + "</white>");
+        send(source, "<gray>•</gray> <yellow>Held Servers:</yellow> <white>" + heldServers + "</white>");
         source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
     }
 

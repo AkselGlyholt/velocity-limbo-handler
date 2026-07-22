@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler;
 
 import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlockRule;
 import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
 import com.akselglyholt.velocityLimboHandler.commands.VlhAdminCommand;
@@ -15,6 +16,7 @@ import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.akselglyholt.velocityLimboHandler.tasks.QueueNotifierTask;
 import com.akselglyholt.velocityLimboHandler.tasks.ReconnectionTask;
 import com.google.inject.Inject;
+import com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
@@ -46,7 +48,7 @@ import java.util.logging.Logger;
         @Dependency(id = "nlogin", optional = true),
         @Dependency(id = "maintenance", optional = true)
 })
-public class VelocityLimboHandler {
+public class VelocityLimboHandler implements VelocityLimboApi.Provider {
     private static VelocityLimboHandler instance;
     private static ProxyServer proxyServer;
     private static final Logger logger = Logger.getLogger("Limbo Handler");
@@ -57,6 +59,7 @@ public class VelocityLimboHandler {
     private static CommandBlocker commandBlocker;
     private static ReconnectBlocker reconnectBlocker;
     private static AuthManager authManager;
+    private static VelocityLimboApiImpl api;
 
     private ConfigManager configManager;
     private ReconnectHandler reconnectHandler;
@@ -88,8 +91,10 @@ public class VelocityLimboHandler {
         }
 
         playerManager = new PlayerManager();
+        api = new VelocityLimboApiImpl(server, this, playerManager);
+        playerManager.attachApi(api);
         commandBlocker = new CommandBlocker();
-        reconnectBlocker = new InMemoryReconnectBlocker();
+        reconnectBlocker = new InMemoryReconnectBlocker(playerManager);
 
         initializeMaintenanceIntegration();
     }
@@ -135,10 +140,12 @@ public class VelocityLimboHandler {
         commandBlocker.replaceCommands(configManager.getDisabledCommands(), CommandBlockRule.onServer(limboName));
 
         reloadTasks();
+        api.markReady();
     }
 
     @Subscribe
     public void onShutdown(ProxyShutdownEvent event) {
+        if (api != null) api.shutdown();
         cancelScheduledTasks();
         if (bstatsMetrics != null) bstatsMetrics.shutdown();
         if (reconnectHandler != null) reconnectHandler.close();
@@ -237,6 +244,8 @@ public class VelocityLimboHandler {
         return logger;
     }
 
+    /** @deprecated External plugins should use {@link VelocityLimboApi#get(ProxyServer)}. */
+    @Deprecated(forRemoval = false, since = "1.9.0")
     public static PlayerManager getPlayerManager() {
         return playerManager;
     }
@@ -261,7 +270,18 @@ public class VelocityLimboHandler {
         return instance;
     }
 
+    /** @deprecated External plugins should use owner-scoped API holds. */
+    @Deprecated(forRemoval = false, since = "1.9.0")
     public static ReconnectBlocker getReconnectBlocker() {
         return reconnectBlocker;
+    }
+
+    public static VelocityLimboApiImpl getApiImplementation() {
+        return api;
+    }
+
+    @Override
+    public VelocityLimboApi velocityLimboApi() {
+        return api;
     }
 }

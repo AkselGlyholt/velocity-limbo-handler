@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.listeners;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
@@ -32,8 +33,11 @@ public class ConnectionListener {
             return;
         }
 
-        // Check if the server has a queue (for incidental joins)
-        if (VelocityLimboHandler.getPlayerManager().hasQueuedPlayers(intendedServer)) {
+        // Server holds block everyone, including queue-bypass players, and preserve queue order.
+        if (VelocityLimboHandler.getPlayerManager().isServerHeld(intendedServer.getServerInfo().getName())
+                || VelocityLimboHandler.getPlayerManager().hasQueuedPlayers(intendedServer)) {
+            VelocityLimboApiImpl api = VelocityLimboHandler.getApiImplementation();
+            if (api != null) api.recordRerouteIntent(player, intendedServer);
             event.setResult(ServerPreConnectEvent.ServerResult.allowed(limbo));
 
             Utility.logDebug(() -> String.format("Rerouting %s to Limbo (Server %s is queued)",
@@ -56,6 +60,8 @@ public class ConnectionListener {
 
         // Remove player from queue if they left Limbo and joined another server
         if (previousServer != null && Utility.doServerNamesMatch(previousServer, limbo)) {
+            VelocityLimboApiImpl api = VelocityLimboHandler.getApiImplementation();
+            if (api != null) api.onPlayerLeft(player);
             VelocityLimboHandler.getPlayerManager().removePlayer(player);
             return;
         }
@@ -112,13 +118,20 @@ public class ConnectionListener {
             Utility.logDebug(() -> String.format("%s will be queued for '%s'",
                     player.getUsername(), queuedTarget.getServerInfo().getName()));
 
-            VelocityLimboHandler.getPlayerManager().addPlayer(player, intendedTarget);
+            VelocityLimboApiImpl api = VelocityLimboHandler.getApiImplementation();
+            if (api != null) {
+                api.onPlayerArrived(player, intendedTarget);
+            } else {
+                VelocityLimboHandler.getPlayerManager().addPlayer(player, intendedTarget);
+            }
         }
     }
 
     @Subscribe
     public void onDisconnect(@NotNull DisconnectEvent event) {
         Player player = event.getPlayer();
+        VelocityLimboApiImpl api = VelocityLimboHandler.getApiImplementation();
+        if (api != null) api.onPlayerDisconnected(player);
         VelocityLimboHandler.getPlayerManager().removePlayer(player);
         VelocityLimboHandler.getPlayerManager().removePlayerIssue(player);
         VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());

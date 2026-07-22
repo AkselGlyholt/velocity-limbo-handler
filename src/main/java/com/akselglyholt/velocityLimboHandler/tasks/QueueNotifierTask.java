@@ -74,6 +74,9 @@ public class QueueNotifierTask implements Runnable {
     }
 
     private void notifyPlayer(Player player, Map<String, Boolean> maintenanceCache) {
+        if (playerManager.isPlayerHeld(player.getUniqueId())) {
+            return;
+        }
         String issue = playerManager.getConnectionIssue(player);
         if (issue != null) {
 
