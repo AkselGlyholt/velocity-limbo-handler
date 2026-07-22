@@ -1,4 +1,4 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.hold;
 
 /** Result status for acquiring a player or server hold. */
 public enum HoldStatus {

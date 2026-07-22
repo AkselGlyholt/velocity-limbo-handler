@@ -1,4 +1,8 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.player;
+
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot;
+import com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase;
+import com.akselglyholt.velocitylimbohandler.api.queue.QueueTier;
 
 import java.util.List;
 import java.util.Objects;

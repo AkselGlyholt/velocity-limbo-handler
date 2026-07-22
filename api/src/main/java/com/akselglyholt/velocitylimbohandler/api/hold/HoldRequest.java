@@ -1,4 +1,4 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.hold;
 
 import java.time.Duration;
 import java.util.Objects;

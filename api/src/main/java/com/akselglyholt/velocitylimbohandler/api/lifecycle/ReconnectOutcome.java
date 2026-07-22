@@ -1,4 +1,4 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.lifecycle;
 
 /** Observable outcome of a reconnect request. */
 public enum ReconnectOutcome {

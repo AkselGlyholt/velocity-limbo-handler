@@ -1,4 +1,4 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.queue;
 
 import java.util.Map;
 import java.util.Objects;

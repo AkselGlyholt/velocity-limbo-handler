@@ -1,6 +1,6 @@
 package com.akselglyholt.velocitylimbohandler.api.events;
 
-import com.akselglyholt.velocitylimbohandler.api.ReconnectOutcome;
+import com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome;
 import com.velocitypowered.api.proxy.Player;
 
 import java.util.Objects;

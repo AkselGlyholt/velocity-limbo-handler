@@ -1,4 +1,4 @@
-package com.akselglyholt.velocitylimbohandler.api;
+package com.akselglyholt.velocitylimbohandler.api.player;
 
 /** Result of changing a managed player's destination. */
 public enum RetargetResult {
