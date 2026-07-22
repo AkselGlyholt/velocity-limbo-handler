@@ -63,6 +63,9 @@ public class ReconnectionTask implements Runnable {
                 if (server == null) {
                     continue;
                 }
+                if (playerManager.isServerHeld(serverName)) {
+                    continue;
+                }
 
                 // Check if the server is in Maintenance mode
                 if (Utility.isServerInMaintenance(serverName)) {
@@ -85,10 +88,14 @@ public class ReconnectionTask implements Runnable {
             serverCursor = (startIndex + batchSize) % serverCount;
         } else {
             for (Player player : connectedPlayers) {
-                if (!playerManager.hasConnectionIssue(player) && player.isActive()) {
+                if (!playerManager.hasConnectionIssue(player) && !playerManager.isPlayerHeld(player.getUniqueId())
+                        && player.isActive()) {
                     // Check if the server is in maintenance mode
                     RegisteredServer previousServer = playerManager.getPreviousServer(player);
                     if (previousServer == null) {
+                        continue;
+                    }
+                    if (playerManager.isServerHeld(previousServer.getServerInfo().getName())) {
                         continue;
                     }
 

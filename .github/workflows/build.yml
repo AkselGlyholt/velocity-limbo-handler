@@ -40,14 +40,14 @@ jobs:
 
       - name: Rename shaded JAR with build number
         run: |
-          jar=$(find target -maxdepth 1 -type f -name "*.jar" ! -name "original-*.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar")
+          jar=$(find plugin/target -maxdepth 1 -type f -name "velocity-limbo-handler-*.jar" ! -name "original-*.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar")
           base=$(basename "$jar" .jar)
           new_name="${base}+${{ github.run_number }}.jar"
-          mv "$jar" "target/$new_name"
+          mv "$jar" "plugin/target/$new_name"
           echo "RENAMED_JAR=$new_name" >> $GITHUB_ENV
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: Click here to download
-          path: target/${{ env.RENAMED_JAR }}
+          path: plugin/target/${{ env.RENAMED_JAR }}

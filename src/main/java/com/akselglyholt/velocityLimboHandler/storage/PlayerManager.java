@@ -1,8 +1,11 @@
 package com.akselglyholt.velocityLimboHandler.storage;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
+import com.akselglyholt.velocitylimbohandler.api.Availability;
+import com.akselglyholt.velocitylimbohandler.api.ReconnectOutcome;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import dev.dejvokep.boostedyaml.route.Route;
@@ -26,9 +29,14 @@ public class PlayerManager {
     );
     private final AtomicLong nextPruneAtNanos = new AtomicLong();
     private volatile String queuePositionMsg;
+    private volatile VelocityLimboApiImpl api;
 
     public PlayerManager() {
         reloadMessages();
+    }
+
+    public void attachApi(VelocityLimboApiImpl api) {
+        this.api = api;
     }
 
     private boolean isAuthBlocked(Player player) {
@@ -63,6 +71,24 @@ public class PlayerManager {
 
         Utility.sendWelcomeMessage(player, null);
 
+        if (VelocityLimboHandler.isQueueEnabled()) {
+            reconnectQueueState.enqueue(player, registeredServer);
+            player.sendMessage(MessageFormatter.formatComponent(queuePositionMsg, player));
+        }
+    }
+
+    /** Registers arrival without admitting to the queue; API event handlers run between these operations. */
+    public void registerPlayerInLimbo(Player player, RegisteredServer registeredServer) {
+        UUID playerId = player.getUniqueId();
+        connectionState.registerPlayer(playerId, registeredServer.getServerInfo().getName());
+        Utility.logDebug(() -> String.format("%s joined limbo — destination %s",
+                player.getUsername(), registeredServer.getServerInfo().getName()));
+        Utility.sendWelcomeMessage(player, null);
+    }
+
+    /** Appends a player to their freshly evaluated permission tier when queueing is enabled. */
+    public void admitPlayer(Player player, RegisteredServer registeredServer) {
+        connectionState.registerPlayer(player.getUniqueId(), registeredServer.getServerInfo().getName());
         if (VelocityLimboHandler.isQueueEnabled()) {
             reconnectQueueState.enqueue(player, registeredServer);
             player.sendMessage(MessageFormatter.formatComponent(queuePositionMsg, player));
@@ -112,6 +138,8 @@ public class PlayerManager {
 
     public void addPlayerWithIssue(Player player, String issue) {
         connectionState.addConnectionIssue(player.getUniqueId(), issue);
+        VelocityLimboApiImpl currentApi = api;
+        if (currentApi != null) currentApi.setConnectionIssue(player, true);
     }
 
     public boolean hasConnectionIssue(Player player) {
@@ -122,8 +150,14 @@ public class PlayerManager {
         return connectionState.getConnectionIssue(player.getUniqueId());
     }
 
+    public String getConnectionIssue(UUID playerId) {
+        return connectionState.getConnectionIssue(playerId);
+    }
+
     public void removePlayerIssue(Player player) {
         connectionState.removeConnectionIssue(player.getUniqueId());
+        VelocityLimboApiImpl currentApi = api;
+        if (currentApi != null) currentApi.setConnectionIssue(player, false);
     }
 
     public void pruneInactivePlayers() {
@@ -177,6 +211,52 @@ public class PlayerManager {
 
     public void setPlayerConnecting(Player player, Boolean add) {
         connectionState.setConnecting(player.getUniqueId(), add);
+    }
+
+    public boolean tryClaimConnection(Player player) {
+        VelocityLimboApiImpl currentApi = api;
+        if (currentApi != null && currentApi.availability() == Availability.READY) {
+            if (!currentApi.tryClaimConnection(player)) return false;
+            connectionState.setConnecting(player.getUniqueId(), true);
+            return true;
+        }
+        if (isPlayerConnecting(player)) return false;
+        setPlayerConnecting(player, true);
+        return true;
+    }
+
+    public boolean usesApiLifecycle() {
+        VelocityLimboApiImpl currentApi = api;
+        return currentApi != null && currentApi.availability() == Availability.READY;
+    }
+
+    public void finishConnectionAttempt(Player player, String destination, ReconnectOutcome outcome, String failure) {
+        connectionState.setConnecting(player.getUniqueId(), false);
+        VelocityLimboApiImpl currentApi = api;
+        if (currentApi != null) currentApi.finishConnectionAttempt(player, destination, outcome, failure);
+    }
+
+    public boolean isPlayerHeld(UUID playerId) {
+        VelocityLimboApiImpl currentApi = api;
+        return currentApi != null && currentApi.isPlayerHeld(playerId);
+    }
+
+    public boolean isServerHeld(String serverName) {
+        VelocityLimboApiImpl currentApi = api;
+        return currentApi != null && currentApi.isServerHeld(serverName);
+    }
+
+    public void setAuthenticationBlocked(UUID playerId, boolean blocked, String reason) {
+        VelocityLimboApiImpl currentApi = api;
+        if (currentApi != null) currentApi.setAuthenticationBlocked(playerId, blocked, reason);
+    }
+
+    public void retargetPlayer(Player player, RegisteredServer server, boolean enqueue) {
+        reconnectQueueState.removePlayer(player.getUniqueId());
+        connectionState.registerPlayer(player.getUniqueId(), server.getServerInfo().getName());
+        if (enqueue && VelocityLimboHandler.isQueueEnabled()) {
+            reconnectQueueState.enqueue(player, server);
+        }
     }
 
     private void removePlayerState(UUID playerId) {
