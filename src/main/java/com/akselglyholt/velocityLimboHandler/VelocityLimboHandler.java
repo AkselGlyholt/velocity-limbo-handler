@@ -174,7 +174,10 @@ public class VelocityLimboHandler {
 
         reconnectionTask = proxyServer.getScheduler().buildTask(this, new ReconnectionTask(proxyServer, limboServer, playerManager, authManager, configManager, reconnectHandler)).repeat(configManager.getTaskInterval(), TimeUnit.MILLISECONDS).schedule();
 
-        queueNotifierTask = proxyServer.getScheduler().buildTask(this, new QueueNotifierTask(limboServer, playerManager, configManager)).repeat(configManager.getQueueNotifyInterval(), TimeUnit.SECONDS).schedule();
+        queueNotifierTask = proxyServer.getScheduler()
+                .buildTask(this, new QueueNotifierTask(proxyServer, limboServer, playerManager, configManager))
+                .repeat(1, TimeUnit.SECONDS)
+                .schedule();
     }
 
     private void initializeMaintenanceIntegration() {

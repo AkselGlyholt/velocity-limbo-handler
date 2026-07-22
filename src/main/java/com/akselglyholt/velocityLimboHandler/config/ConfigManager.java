@@ -32,7 +32,9 @@ public class ConfigManager {
     private String limboName;
     private String directConnectServerName;
     private int taskInterval;
+    private int reconnectBatchSize;
     private int queueNotifyInterval;
+    private int queueNotifyBatchSize;
     private boolean queueEnabled;
     private List<String> disabledCommands;
     private boolean connectionWarnings;
@@ -82,7 +84,9 @@ public class ConfigManager {
         limboName = config.getString(Route.from("limbo-name"));
         directConnectServerName = config.getString(Route.from("direct-connect-server"));
         taskInterval = config.getInt(Route.from("task-interval"));
+        reconnectBatchSize = config.getInt("reconnect-batch-size", 8);
         queueNotifyInterval = config.getInt(Route.from("queue-notify-interval"));
+        queueNotifyBatchSize = config.getInt("queue-notify-batch-size", 64);
         queueEnabled = config.getBoolean(Route.from("queue-enabled"), true);
         disabledCommands = config.getStringList("disabled-commands");
         connectionWarnings = config.getBoolean("connection-warnings", false);
@@ -135,6 +139,14 @@ public class ConfigManager {
 
     public int getQueueNotifyInterval() {
         return queueNotifyInterval;
+    }
+
+    public int getReconnectBatchSize() {
+        return reconnectBatchSize;
+    }
+
+    public int getQueueNotifyBatchSize() {
+        return queueNotifyBatchSize;
     }
 
     public boolean isQueueEnabled() {

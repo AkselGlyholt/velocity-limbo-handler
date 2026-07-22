@@ -1,4 +1,4 @@
-file-version: 8
+file-version: 9
 
 # Server configs - These are settings you need to change!
 # The name of the limbo server in your velocity network
@@ -9,10 +9,12 @@ direct-connect-server: lobby # Default "lobby"
 
 # How often the server should check if it can connect
 task-interval: 3000 # The time in milliseconds (Default: 3000)
+reconnect-batch-size: 8 # Maximum backend queues processed per task run (Default: 8)
 
 # How often should the user be notified of their position in the queue
 queue-enabled: true # Should players be reconnected through a queue (Default: true)
 queue-notify-interval: 30 # The time in seconds (Default: 30)
+queue-notify-batch-size: 64 # Maximum due notifications sent per dispatcher tick (Default: 64)
 
 # A list of disabled commands, which will not work inside the Limbo server. Recommended commands are ones that the player can use to transfer server, like /server or /hub
 disabled-commands: ["server", "lobby", "hub"]

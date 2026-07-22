@@ -272,6 +272,7 @@ class AdvancedPlayerStateTest {
         Player queuedPlayer = mockPlayer(UUID.randomUUID(), true);
 
         when(configManager.isQueueEnabled()).thenReturn(true);
+        when(configManager.getReconnectBatchSize()).thenReturn(8);
         when(limboServer.getPlayersConnected()).thenReturn(List.of(queuedPlayer));
         when(proxyServer.getAllServers()).thenReturn(List.of(queuedServer, emptyServer));
         playerManager.addPlayer(queuedPlayer, queuedServer);
