@@ -65,4 +65,19 @@ class PlayerConnectionStateTest {
         assertTrue(state.isConnecting(active));
         assertTrue(state.hasConnectionIssue(active));
     }
+
+    @Test
+    void registeringExistingPlayerKeepsTransientState() {
+        PlayerConnectionState state = new PlayerConnectionState();
+        UUID playerId = UUID.randomUUID();
+
+        state.registerPlayer(playerId, "survival");
+        state.setConnecting(playerId, true);
+        state.addConnectionIssue(playerId, "retrying");
+        state.registerPlayer(playerId, "factions");
+
+        assertEquals("factions", state.getRegisteredServer(playerId).orElseThrow());
+        assertTrue(state.isConnecting(playerId));
+        assertEquals("retrying", state.getConnectionIssue(playerId));
+    }
 }
