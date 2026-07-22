@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -283,7 +284,16 @@ final class ReconnectQueueState {
     }
 
     private void removeStaleOwnership(String serverName, UUID playerId) {
-        if (queueByPlayer.remove(playerId, serverName)) {
+        AtomicBoolean ownershipRemoved = new AtomicBoolean();
+        queueByPlayer.computeIfPresent(playerId, (ignored, ownedServerName) -> {
+            if (!ownedServerName.equals(serverName) || getActivePlayer(playerId) != null) {
+                return ownedServerName;
+            }
+            ownershipRemoved.set(true);
+            return null;
+        });
+
+        if (ownershipRemoved.get()) {
             staleEntryRemover.accept(playerId);
         }
     }

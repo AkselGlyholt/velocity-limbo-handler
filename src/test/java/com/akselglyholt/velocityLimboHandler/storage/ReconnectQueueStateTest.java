@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -87,6 +88,29 @@ class ReconnectQueueStateTest {
         assertEquals(-1, state.getQueuePosition(stale.getUniqueId(), "survival"));
         assertEquals(0, state.getQueuedServerCount());
         assertTrue(state.getQueuedServerNames().isEmpty());
+    }
+
+    @Test
+    void staleCleanupPreservesOwnershipWhenPlayerBecomesActiveAgain() {
+        UUID playerId = UUID.randomUUID();
+        Player rejoinedPlayer = mock(Player.class);
+        when(rejoinedPlayer.getUniqueId()).thenReturn(playerId);
+        when(rejoinedPlayer.hasPermission(anyString())).thenReturn(false);
+        AtomicInteger resolutions = new AtomicInteger();
+        List<UUID> removedStale = new ArrayList<>();
+        ReconnectQueueState state = new ReconnectQueueState(
+                removedStale::add,
+                ignored -> resolutions.getAndIncrement() == 0 ? null : rejoinedPlayer
+        );
+        RegisteredServer server = mockServer("survival");
+        state.enqueue(rejoinedPlayer, server);
+
+        assertNull(state.getNextQueuedPlayer(server));
+
+        assertTrue(removedStale.isEmpty());
+        state.enqueue(rejoinedPlayer, server);
+        state.removePlayer(playerId);
+        assertEquals(0, state.getQueuedPlayerCount());
     }
 
     @Test
