@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 @Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", authors = "Aksel Glyholt", version = VersionInfo.VERSION, dependencies = {
@@ -80,10 +81,8 @@ public class VelocityLimboHandler {
         try {
             configManager.load();
         } catch (IOException e) {
-            logger.severe("Something went wrong while trying to update/create config: " + e);
-            logger.severe("Plugin will now shut down!");
-            Optional<PluginContainer> container = proxyServer.getPluginManager().getPlugin("velocity-limbo-handler");
-            container.ifPresent(pluginContainer -> pluginContainer.getExecutorService().shutdown());
+            logger.log(Level.SEVERE, "Unable to load VelocityLimboHandler configuration", e);
+            throw new IllegalStateException("VelocityLimboHandler cannot start without a valid configuration", e);
         }
 
         playerManager = new PlayerManager();
