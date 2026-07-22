@@ -89,7 +89,7 @@ limbo = "limbo"
 
 ## 🔌 Developer API v1
 
-VLH 1.9.0 exposes a Java 21 API for moving players into limbo atomically, applying owner-scoped
+VLH exposes a Java 21 API for moving players into limbo atomically, applying owner-scoped
 player or server holds, retargeting managed players, reading immutable snapshots, and observing
 lifecycle events. The API is in-memory and intended for plugins running on the same Velocity proxy.
 
@@ -105,6 +105,7 @@ public final class MyPlugin { }
 
 Use the API artifact as `compileOnly`/`provided`. Do **not** shade or relocate it: the implementation
 and API classes are already embedded in the installed VLH plugin JAR.
+Replace `RELEASE_TAG` below with the GitHub release tag you install, including its leading `v`.
 
 ### Gradle
 
@@ -114,7 +115,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.AkselGlyholt.velocity-limbo-handler:velocity-limbo-handler-api:v1.9.0")
+    compileOnly("com.github.AkselGlyholt.velocity-limbo-handler:velocity-limbo-handler-api:RELEASE_TAG")
 }
 ```
 
@@ -129,7 +130,7 @@ dependencies {
 <dependency>
   <groupId>com.github.AkselGlyholt.velocity-limbo-handler</groupId>
   <artifactId>velocity-limbo-handler-api</artifactId>
-  <version>v1.9.0</version>
+  <version>RELEASE_TAG</version>
   <scope>provided</scope>
 </dependency>
 ```

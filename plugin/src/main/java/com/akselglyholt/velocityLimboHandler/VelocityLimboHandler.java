@@ -49,6 +49,7 @@ import java.util.logging.Logger;
         @Dependency(id = "maintenance", optional = true)
 })
 public class VelocityLimboHandler implements VelocityLimboApi.Provider {
+    private static final String API_V1_INTRODUCED_VERSION = "1.9.0";
     private static VelocityLimboHandler instance;
     private static ProxyServer proxyServer;
     private static final Logger logger = Logger.getLogger("Limbo Handler");
@@ -245,7 +246,7 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
     }
 
     /** @deprecated External plugins should use {@link VelocityLimboApi#get(ProxyServer)}. */
-    @Deprecated(forRemoval = false, since = "1.9.0")
+    @Deprecated(forRemoval = false, since = API_V1_INTRODUCED_VERSION)
     public static PlayerManager getPlayerManager() {
         return playerManager;
     }
@@ -271,7 +272,7 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
     }
 
     /** @deprecated External plugins should use owner-scoped API holds. */
-    @Deprecated(forRemoval = false, since = "1.9.0")
+    @Deprecated(forRemoval = false, since = API_V1_INTRODUCED_VERSION)
     public static ReconnectBlocker getReconnectBlocker() {
         return reconnectBlocker;
     }

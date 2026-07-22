@@ -6,7 +6,7 @@
 
     <groupId>com.github.AkselGlyholt.velocity-limbo-handler</groupId>
     <artifactId>velocity-limbo-handler-parent</artifactId>
-    <version>1.9.0</version>
+    <version>${revision}</version>
     <packaging>pom</packaging>
 
     <name>Velocity Limbo Handler</name>
@@ -18,6 +18,8 @@
     </modules>
 
     <properties>
+        <!-- Single source of truth for the current plugin and API version. -->
+        <revision>1.9.0</revision>
         <java.version>21</java.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -72,6 +74,27 @@
             </plugins>
         </pluginManagement>
         <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.6.0</version>
+                <configuration>
+                    <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                    <updatePomFile>true</updatePomFile>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals><goal>flatten</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>flatten-clean</id>
+                        <phase>clean</phase>
+                        <goals><goal>clean</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

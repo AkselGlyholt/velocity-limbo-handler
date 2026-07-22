@@ -20,7 +20,7 @@
         <dependency>
             <groupId>com.github.AkselGlyholt.velocity-limbo-handler</groupId>
             <artifactId>velocity-limbo-handler-api</artifactId>
-            <version>1.9.0</version>
+            <version>${vlh.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
