@@ -70,7 +70,7 @@ final class ReconnectQueueState {
                 playerId -> removeStaleOwnership(serverName, playerId)
         );
         if (serverQueue.version() != beforeVersion) {
-            invalidatePositionCache(serverName);
+            invalidateQueueCaches(serverName);
         }
         removeServerQueueIfEmpty(serverName, serverQueue);
 
@@ -87,7 +87,9 @@ final class ReconnectQueueState {
             return -1;
         }
 
-        return getOrBuildQueuePositions(serverName, serverQueue).getOrDefault(targetId, -1);
+        int position = getOrBuildQueuePositions(serverName, serverQueue).getOrDefault(targetId, -1);
+        removeServerQueueIfEmpty(serverName, serverQueue);
+        return position;
     }
 
     void pruneInactivePlayers() {
@@ -96,7 +98,7 @@ final class ReconnectQueueState {
                     this::getActivePlayer,
                     playerId -> removeStaleOwnership(serverName, playerId)
             )) {
-                invalidatePositionCache(serverName);
+                invalidateQueueCaches(serverName);
             }
             removeServerQueueIfEmpty(serverName, serverQueue);
         });
@@ -153,7 +155,7 @@ final class ReconnectQueueState {
                 playerId -> removeStaleOwnership(serverName, playerId)
         );
         if (serverQueue.version() != beforeVersion) {
-            invalidatePositionCache(serverName);
+            invalidateQueueCaches(serverName);
         }
         removeServerQueueIfEmpty(serverName, serverQueue);
 
@@ -188,7 +190,7 @@ final class ReconnectQueueState {
                 player -> isMaintenanceAllowed(player, serverName)
         );
         if (serverQueue.version() != beforeVersion) {
-            invalidatePositionCache(serverName);
+            invalidateQueueCaches(serverName);
         }
 
         Player maintenanceAllowed = match.player();
@@ -197,6 +199,7 @@ final class ReconnectQueueState {
                 now + MAINTENANCE_CANDIDATE_TTL_NANOS,
                 maintenanceAllowed == null ? null : maintenanceAllowed.getUniqueId()
         ));
+        removeServerQueueIfEmpty(serverName, serverQueue);
 
         return maintenanceAllowed;
     }
@@ -265,11 +268,15 @@ final class ReconnectQueueState {
         queuePositionCache.remove(serverName);
     }
 
+    private void invalidateQueueCaches(String serverName) {
+        invalidatePositionCache(serverName);
+        maintenanceCandidateCache.remove(serverName);
+    }
+
     private void removeFromServerQueue(String serverName, UUID playerId) {
         reconnectQueues.computeIfPresent(serverName, (ignored, serverQueue) -> {
             if (serverQueue.remove(playerId)) {
-                invalidatePositionCache(serverName);
-                maintenanceCandidateCache.remove(serverName);
+                invalidateQueueCaches(serverName);
             }
             return serverQueue.isEmpty() ? null : serverQueue;
         });
@@ -282,11 +289,11 @@ final class ReconnectQueueState {
     }
 
     private void removeServerQueueIfEmpty(String serverName, ServerQueue expectedQueue) {
-        reconnectQueues.computeIfPresent(serverName, (ignored, currentQueue) ->
+        ServerQueue remainingQueue = reconnectQueues.computeIfPresent(serverName, (ignored, currentQueue) ->
                 currentQueue == expectedQueue && currentQueue.isEmpty() ? null : currentQueue
         );
-        if (!reconnectQueues.containsKey(serverName)) {
-            invalidatePositionCache(serverName);
+        if (remainingQueue == null) {
+            invalidateQueueCaches(serverName);
         }
     }
 

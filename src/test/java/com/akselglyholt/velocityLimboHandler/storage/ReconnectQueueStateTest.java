@@ -74,6 +74,22 @@ class ReconnectQueueStateTest {
     }
 
     @Test
+    void getQueuePositionEvictsQueueWhenLastEntryIsStale() {
+        Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
+        ReconnectQueueState state = new ReconnectQueueState(id -> {
+        }, activePlayers::get);
+        RegisteredServer server = mockServer("survival");
+        Player stale = mockPlayer(UUID.randomUUID(), "Stale", activePlayers);
+
+        state.enqueue(stale, server);
+        activePlayers.remove(stale.getUniqueId());
+
+        assertEquals(-1, state.getQueuePosition(stale.getUniqueId(), "survival"));
+        assertEquals(0, state.getQueuedServerCount());
+        assertTrue(state.getQueuedServerNames().isEmpty());
+    }
+
+    @Test
     void findFirstMaintenanceAllowedPlayer_respectsEligibilityChecks() {
         Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
         ReconnectQueueState state = new ReconnectQueueState(id -> {
