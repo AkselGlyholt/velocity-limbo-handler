@@ -1,17 +1,28 @@
 package com.akselglyholt.velocityLimboHandler.commands;
 
 import java.util.HashMap;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Locale;
 
 public class CommandBlocker {
-    private final Map<String, CommandBlockRule> commandRules = new HashMap<>();
+    private volatile Map<String, CommandBlockRule> commandRules = Map.of();
 
-    public void blockCommand(String command, CommandBlockRule rule) {
-        commandRules.put(command.toLowerCase(Locale.ROOT), rule);
+    public synchronized void blockCommand(String command, CommandBlockRule rule) {
+        Map<String, CommandBlockRule> updatedRules = new HashMap<>(commandRules);
+        updatedRules.put(command.toLowerCase(Locale.ROOT), rule);
+        commandRules = Map.copyOf(updatedRules);
     }
 
-    public final Map<String, CommandBlockRule> getCommandRules() {
-        return commandRules;
+    public void replaceCommands(Collection<String> commands, CommandBlockRule rule) {
+        Map<String, CommandBlockRule> updatedRules = new HashMap<>();
+        for (String command : commands) {
+            updatedRules.put(command.toLowerCase(Locale.ROOT), rule);
+        }
+        commandRules = Map.copyOf(updatedRules);
+    }
+
+    public CommandBlockRule getRule(String command) {
+        return commandRules.get(command);
     }
 }

@@ -20,7 +20,6 @@ import java.util.function.Supplier;
 
 public class Utility {
     private static final MiniMessage miniMessage = MiniMessage.miniMessage();
-    private static final String welcomeMsg = VelocityLimboHandler.getMessageConfig().getString(Route.from("welcomeMessage"));
     private static final Component AFK_MESSAGE = miniMessage.deserialize(
             "<yellow>⏳ You were inactive for too long and moved to Limbo.</yellow>\n"
                     + "<gray>You will be reconnected when you interact with the game.</gray>"
@@ -49,7 +48,9 @@ public class Utility {
             case "afk" -> AFK_MESSAGE;
             case "server-restart" -> SERVER_RESTART_MESSAGE;
             case "connection-issue" -> CONNECTION_ISSUE_MESSAGE;
-            default -> MessageFormatter.formatComponent(welcomeMsg, player);
+            default -> MessageFormatter.formatComponent(
+                    VelocityLimboHandler.getMessageConfig().getString(Route.from("welcomeMessage")), player
+            );
         };
 
         player.sendMessage(message);

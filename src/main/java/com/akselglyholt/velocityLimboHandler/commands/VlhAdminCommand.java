@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class VlhAdminCommand implements SimpleCommand {
     private static final String ADMIN_PERMISSION = "vlh.admin";
@@ -26,6 +27,7 @@ public class VlhAdminCommand implements SimpleCommand {
     private static final int QUEUE_PAGE_SIZE = 10;
 
     private final MiniMessage miniMessage;
+    private final AtomicBoolean reloadInProgress = new AtomicBoolean();
 
     public VlhAdminCommand() {
         this.miniMessage = MiniMessage.miniMessage();
@@ -92,17 +94,25 @@ public class VlhAdminCommand implements SimpleCommand {
             return;
         }
 
-        ConfigManager configManager = VelocityLimboHandler.getConfigManager();
-
-        try {
-            configManager.load();
-            VelocityLimboHandler.getPlayerManager().reloadMessages();
-            VelocityLimboHandler.getInstance().reloadTasks();
-            send(source, "<green>✔ Reload complete.</green> <gray>Configuration, messages, and task schedules were refreshed.</gray>");
-        } catch (IOException exception) {
-            send(source, "<red>✖ Reload failed.</red> <gray>Could not reload configuration. Check console for details.</gray>");
-            VelocityLimboHandler.getLogger().severe("Failed to reload configuration: " + exception.getMessage());
+        if (!reloadInProgress.compareAndSet(false, true)) {
+            send(source, "<yellow>A reload is already in progress.</yellow>");
+            return;
         }
+
+        ConfigManager configManager = VelocityLimboHandler.getConfigManager();
+        VelocityLimboHandler plugin = VelocityLimboHandler.getInstance();
+        VelocityLimboHandler.getProxyServer().getScheduler().buildTask(plugin, () -> {
+            try {
+                configManager.load();
+                plugin.applyReloadedConfiguration();
+                send(source, "<green>✔ Reload complete.</green> <gray>Configuration, messages, commands, and task schedules were refreshed.</gray>");
+            } catch (IOException | RuntimeException exception) {
+                send(source, "<red>✖ Reload failed.</red> <gray>Could not reload configuration. Check console for details.</gray>");
+                VelocityLimboHandler.getLogger().severe("Failed to reload configuration: " + exception.getMessage());
+            } finally {
+                reloadInProgress.set(false);
+            }
+        }).schedule();
     }
 
     private void handleStatus(CommandSource source) {

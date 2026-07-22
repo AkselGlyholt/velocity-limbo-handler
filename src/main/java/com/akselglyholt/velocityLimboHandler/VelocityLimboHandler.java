@@ -135,10 +135,7 @@ public class VelocityLimboHandler {
         getLogger().info("Queue Enabled: " + configManager.isQueueEnabled());
 
         // Disabled commands
-        List<String> disabledCommands = configManager.getDisabledCommands();
-        for (String cmd : disabledCommands) {
-            commandBlocker.blockCommand(cmd, CommandBlockRule.onServer(limboName));
-        }
+        commandBlocker.replaceCommands(configManager.getDisabledCommands(), CommandBlockRule.onServer(limboName));
 
         reloadTasks();
     }
@@ -178,6 +175,15 @@ public class VelocityLimboHandler {
                 .buildTask(this, new QueueNotifierTask(proxyServer, limboServer, playerManager, configManager))
                 .repeat(1, TimeUnit.SECONDS)
                 .schedule();
+    }
+
+    public synchronized void applyReloadedConfiguration() {
+        playerManager.reloadMessages();
+        commandBlocker.replaceCommands(
+                configManager.getDisabledCommands(),
+                CommandBlockRule.onServer(configManager.getLimboName())
+        );
+        reloadTasks();
     }
 
     private void initializeMaintenanceIntegration() {

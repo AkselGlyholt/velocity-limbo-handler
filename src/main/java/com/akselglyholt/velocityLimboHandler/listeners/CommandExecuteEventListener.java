@@ -35,7 +35,7 @@ public class CommandExecuteEventListener {
             String commandName = (separator < 0 ? command : command.substring(0, separator)).toLowerCase(Locale.ROOT);
 
             // Get the rule for this specific command
-            CommandBlockRule rule = commandBlocker.getCommandRules().get(commandName);
+            CommandBlockRule rule = commandBlocker.getRule(commandName);
 
             if (rule != null && rule.shouldBlock(player)) {
                 event.setResult(CommandExecuteEvent.CommandResult.denied());
