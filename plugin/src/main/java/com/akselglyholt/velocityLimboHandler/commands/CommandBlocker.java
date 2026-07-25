@@ -14,7 +14,7 @@ public class CommandBlocker {
         commandRules = Map.copyOf(updatedRules);
     }
 
-    public void replaceCommands(Collection<String> commands, CommandBlockRule rule) {
+    public synchronized void replaceCommands(Collection<String> commands, CommandBlockRule rule) {
         Map<String, CommandBlockRule> updatedRules = new HashMap<>();
         for (String command : commands) {
             updatedRules.put(command.toLowerCase(Locale.ROOT), rule);

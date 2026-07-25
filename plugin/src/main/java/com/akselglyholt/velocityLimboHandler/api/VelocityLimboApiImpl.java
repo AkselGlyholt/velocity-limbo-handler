@@ -357,8 +357,13 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                     return;
                 }
             }
-            acquirePlayerHold(AUTH_OWNER, playerId,
+            HoldResult result = acquirePlayerHold(AUTH_OWNER, playerId,
                     new HoldRequest(reason == null ? "authentication" : reason));
+            if (result.status() != HoldStatus.ACQUIRED) {
+                String playerName = proxy.getPlayer(playerId).map(Player::getUsername).orElse("unavailable");
+                VelocityLimboHandler.getLogger().warning("Could not acquire authentication hold for "
+                        + playerName + " (" + playerId + "): " + result.status());
+            }
             return;
         }
 
@@ -729,16 +734,8 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             }
 
             for (UUID leaseId : dueIds) {
-                LeaseRecord lease = leases.get(leaseId);
-                if (lease == null || lease.expiresAt.isEmpty()
-                        || lease.expiresAt.orElseThrow().isAfter(now)) continue;
-                UUID playerId = lease.targetType == HoldTarget.PLAYER ? UUID.fromString(lease.target) : null;
-                ManagedPlayerSnapshot before = playerId == null ? null : snapshotLocked(playerId);
-                removeLeaseIndexesLocked(lease);
-                long eventRevision = ++revision;
-                ManagedPlayerSnapshot after = playerId == null ? null : resumeAfterFinalHoldLocked(playerId);
-                List<HoldSnapshot> holds = playerId == null ? serverHoldsLocked(lease.target) : null;
-                expired.add(new ExpiredLeaseResult(lease, before, after, holds, eventRevision));
+                ExpiredLeaseResult result = expireLeaseLocked(leaseId, now);
+                if (result != null) expired.add(result);
             }
             scheduleNextExpiryLocked();
         }
@@ -751,6 +748,21 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                         result.lease.target, result.serverHolds, result.eventRevision));
             }
         }
+    }
+
+    private ExpiredLeaseResult expireLeaseLocked(UUID leaseId, Instant now) {
+        LeaseRecord lease = leases.get(leaseId);
+        if (lease == null || lease.expiresAt.isEmpty() || lease.expiresAt.orElseThrow().isAfter(now)) {
+            return null;
+        }
+
+        UUID playerId = lease.targetType == HoldTarget.PLAYER ? UUID.fromString(lease.target) : null;
+        ManagedPlayerSnapshot before = playerId == null ? null : snapshotLocked(playerId);
+        removeLeaseIndexesLocked(lease);
+        long eventRevision = ++revision;
+        ManagedPlayerSnapshot after = playerId == null ? null : resumeAfterFinalHoldLocked(playerId);
+        List<HoldSnapshot> holds = playerId == null ? serverHoldsLocked(lease.target) : null;
+        return new ExpiredLeaseResult(lease, before, after, holds, eventRevision);
     }
 
     private void removeLeaseLocked(UUID leaseId) {
@@ -868,6 +880,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         }
 
         @Override public HoldResult holdServer(String serverName, HoldRequest request) {
+            Objects.requireNonNull(serverName, "serverName");
             Objects.requireNonNull(request, "request");
             return availability == Availability.READY
                     ? acquireServerHold(ownerId, serverName, request) : HoldResult.failed(HoldStatus.NOT_READY);
@@ -885,6 +898,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
 
         @Override public RetargetResult retargetPlayer(UUID playerId, String serverName) {
             Objects.requireNonNull(playerId, "playerId");
+            Objects.requireNonNull(serverName, "serverName");
             return availability == Availability.READY ? retarget(playerId, serverName) : RetargetResult.NOT_READY;
         }
     }

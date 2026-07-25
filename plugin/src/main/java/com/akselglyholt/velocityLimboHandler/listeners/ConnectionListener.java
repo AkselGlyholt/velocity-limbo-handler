@@ -33,8 +33,9 @@ public class ConnectionListener {
             return;
         }
 
-        // Server holds block everyone, including queue-bypass players, and preserve queue order.
-        if (VelocityLimboHandler.getPlayerManager().isServerHeld(intendedServer.getServerInfo().getName())
+        // Holds block the affected player or destination, including queue-bypass players.
+        if (VelocityLimboHandler.getPlayerManager().isPlayerHeld(player.getUniqueId())
+                || VelocityLimboHandler.getPlayerManager().isServerHeld(intendedServer.getServerInfo().getName())
                 || VelocityLimboHandler.getPlayerManager().hasQueuedPlayers(intendedServer)) {
             VelocityLimboApiImpl api = VelocityLimboHandler.getApiImplementation();
             if (api != null) api.recordRerouteIntent(player, intendedServer);

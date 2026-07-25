@@ -123,6 +123,28 @@ class ConnectionListenerTest {
     }
 
     @Test
+    void testOnPlayerPreConnect_ReroutesHeldPlayer() {
+        ServerPreConnectEvent event = mock(ServerPreConnectEvent.class);
+        Player player = mock(Player.class);
+        RegisteredServer intendedServer = mock(RegisteredServer.class);
+        ServerInfo intendedInfo = mock(ServerInfo.class);
+        UUID playerId = UUID.randomUUID();
+
+        when(event.getPlayer()).thenReturn(player);
+        when(event.getOriginalServer()).thenReturn(intendedServer);
+        when(player.getUniqueId()).thenReturn(playerId);
+        when(intendedServer.getServerInfo()).thenReturn(intendedInfo);
+        when(intendedInfo.getName()).thenReturn("survival");
+        when(playerManager.isPlayerHeld(playerId)).thenReturn(true);
+
+        connectionListener.onPlayerPreConnect(event);
+
+        verify(event).setResult(argThat(result ->
+                result.getServer().isPresent() && result.getServer().get().equals(limboServer)
+        ));
+    }
+
+    @Test
     void testOnPlayerPostConnect_JoinedLimbo() {
         ServerPostConnectEvent event = mock(ServerPostConnectEvent.class);
         Player player = mock(Player.class);

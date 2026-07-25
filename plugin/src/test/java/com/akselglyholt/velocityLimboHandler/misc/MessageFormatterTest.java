@@ -101,4 +101,15 @@ class MessageFormatterTest {
         verify(playerManager, never()).getQueuePosition(player);
         verify(playerManager).getQueueSize("survival");
     }
+
+    @Test
+    void formatComponent_usesTheSameValuesAsStringFormatting() {
+        String message = "[player] is #[queue-position] of [queue-size] for [queued-server] "
+                + "with [total-limbo] in limbo";
+
+        String formatted = MessageFormatter.formatMessage(message, player);
+        var component = MessageFormatter.formatComponent(message, player);
+
+        assertEquals(formatted, PlainTextComponentSerializer.plainText().serialize(component));
+    }
 }

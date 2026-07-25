@@ -14,9 +14,9 @@ import java.lang.reflect.Method;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 public class Utility {
@@ -148,7 +148,7 @@ public class Utility {
         private final Optional<Method> getSettingsMethod;
         private final Map<Class<?>, Optional<Method>> serverMaintenanceMethods = new ConcurrentHashMap<>();
         private final Map<Class<?>, Optional<Method>> whitelistMethods = new ConcurrentHashMap<>();
-        private final AtomicBoolean failureLogged = new AtomicBoolean();
+        private final Set<String> loggedFailures = ConcurrentHashMap.newKeySet();
 
         private MaintenanceAdapter(Object api) {
             this.api = api;
@@ -226,7 +226,7 @@ public class Utility {
         }
 
         private void logFailureOnce(String operation, Exception exception) {
-            if (failureLogged.compareAndSet(false, true)) {
+            if (loggedFailures.add(operation)) {
                 VelocityLimboHandler.getLogger().warning(
                         "Failed to access " + operation + " API: " + exception.getMessage()
                 );

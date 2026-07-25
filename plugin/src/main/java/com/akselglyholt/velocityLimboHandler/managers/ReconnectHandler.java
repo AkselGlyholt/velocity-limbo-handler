@@ -92,6 +92,12 @@ public class ReconnectHandler implements AutoCloseable {
                         player.getUsername(), server.getServerInfo().getName()));
                 return;
             }
+            if (isHeld(player, server)) {
+                failure = "hold acquired";
+                Utility.logDebug(() -> String.format("Skipping reconnect for %s — a hold was acquired for %s",
+                        player.getUsername(), server.getServerInfo().getName()));
+                return;
+            }
 
             Utility.logDebug(() -> String.format("Connecting %s to %s",
                     player.getUsername(), server.getServerInfo().getName()));
@@ -109,6 +115,11 @@ public class ReconnectHandler implements AutoCloseable {
                 finishAttempt(player, server, ReconnectOutcome.CONNECTION_FAILURE, failure, apiLifecycle);
             }
         }
+    }
+
+    private boolean isHeld(Player player, RegisteredServer server) {
+        return playerManager.isServerHeld(server.getServerInfo().getName())
+                || playerManager.isPlayerHeld(player.getUniqueId());
     }
 
     private boolean isMaintenanceBlocked(Player player, RegisteredServer server) {
