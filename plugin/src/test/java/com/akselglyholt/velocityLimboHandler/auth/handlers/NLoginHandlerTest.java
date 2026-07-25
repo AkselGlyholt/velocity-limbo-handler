@@ -2,6 +2,7 @@ package com.akselglyholt.velocityLimboHandler.auth.handlers;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.plugin.PluginManager;
@@ -30,6 +31,7 @@ class NLoginHandlerTest {
     private MockedStatic<VelocityLimboHandler> plugin;
     private PlayerManager playerManager;
     private ReconnectBlocker blocker;
+    private VelocityLimboApiImpl api;
     private NLoginHandler handler;
     private ServerPreConnectEvent event;
     private Player player;
@@ -43,6 +45,7 @@ class NLoginHandlerTest {
         PluginManager pluginManager = mock(PluginManager.class);
         playerManager = mock(PlayerManager.class);
         blocker = mock(ReconnectBlocker.class);
+        api = mock(VelocityLimboApiImpl.class);
         RegisteredServer limbo = mock(RegisteredServer.class);
         intendedServer = mock(RegisteredServer.class);
         ServerInfo intendedInfo = mock(ServerInfo.class);
@@ -64,7 +67,7 @@ class NLoginHandlerTest {
         when(intendedServer.getServerInfo()).thenReturn(intendedInfo);
         when(intendedInfo.getName()).thenReturn("survival");
 
-        handler = new NLoginHandler(proxy, blocker);
+        handler = new NLoginHandler(proxy, blocker, api);
     }
 
     @AfterEach
@@ -74,7 +77,7 @@ class NLoginHandlerTest {
 
     @Test
     void heldPlayerIsLeftForConnectionListener() {
-        when(playerManager.isPlayerHeld(playerId)).thenReturn(true);
+        when(api.isPlayerHeld(playerId)).thenReturn(true);
 
         handler.onServerPreConnect(event);
 

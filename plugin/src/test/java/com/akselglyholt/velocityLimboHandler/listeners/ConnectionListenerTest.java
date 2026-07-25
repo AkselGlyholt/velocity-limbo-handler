@@ -2,6 +2,7 @@ package com.akselglyholt.velocityLimboHandler.listeners;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
@@ -39,6 +40,7 @@ class ConnectionListenerTest {
     private Logger logger;
     private YamlDocument messageConfig;
     private ConfigManager configManager;
+    private VelocityLimboApiImpl api;
 
     private ConnectionListener connectionListener;
 
@@ -53,6 +55,7 @@ class ConnectionListenerTest {
         logger = mock(Logger.class);
         messageConfig = mock(YamlDocument.class);
         configManager = mock(ConfigManager.class);
+        api = mock(VelocityLimboApiImpl.class);
 
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getPlayerManager).thenReturn(playerManager);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getProxyServer).thenReturn(proxyServer);
@@ -76,7 +79,7 @@ class ConnectionListenerTest {
         when(directInfo.getName()).thenReturn("hub");
         when(directConnectServer.getServerInfo()).thenReturn(directInfo);
 
-        connectionListener = new ConnectionListener();
+        connectionListener = new ConnectionListener(api, playerManager);
     }
 
     @AfterEach
@@ -182,7 +185,7 @@ class ConnectionListenerTest {
         when(player.getUniqueId()).thenReturn(playerId);
         when(intendedServer.getServerInfo()).thenReturn(intendedInfo);
         when(intendedInfo.getName()).thenReturn("survival");
-        when(playerManager.isPlayerHeld(playerId)).thenReturn(true);
+        when(api.isPlayerHeld(playerId)).thenReturn(true);
 
         connectionListener.onPlayerPreConnect(event);
 
@@ -207,8 +210,7 @@ class ConnectionListenerTest {
 
         connectionListener.onPlayerPostConnect(event);
 
-        // Should be added to player manager targeting directConnectServer (since no previous server and no virtual host)
-        verify(playerManager).addPlayer(player, directConnectServer);
+        verify(api).onPlayerArrived(player, directConnectServer);
     }
 
     @Test
@@ -251,7 +253,7 @@ class ConnectionListenerTest {
 
         connectionListener.onPlayerPostConnect(event);
 
-        verify(playerManager).removePlayer(player);
+        verify(api).onPlayerLeft(player, currentServer);
     }
 
     @Test
@@ -265,8 +267,7 @@ class ConnectionListenerTest {
 
         connectionListener.onDisconnect(event);
 
-        verify(playerManager).removePlayer(player);
-        verify(playerManager).removePlayerIssue(player);
+        verify(api).onPlayerDisconnected(player);
         verify(reconnectBlocker).unblock(uuid);
     }
 }

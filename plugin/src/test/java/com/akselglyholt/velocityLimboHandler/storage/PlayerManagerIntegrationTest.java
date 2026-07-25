@@ -88,7 +88,7 @@ class PlayerManagerIntegrationTest {
     }
 
     @Test
-    void removePlayer_clearsStateQueueAndUnblocksReconnect() {
+    void removePlayerClearsStateAndQueue() {
         RegisteredServer survival = mockServer("survival");
         Player player = mockPlayer(UUID.randomUUID(), "Bravo", true);
 
@@ -103,7 +103,6 @@ class PlayerManagerIntegrationTest {
         assertFalse(playerManager.hasConnectionIssue(player));
         assertFalse(playerManager.hasQueuedPlayers(survival));
         assertEquals(0, playerManager.getQueuedPlayerCount());
-        verify(reconnectBlocker).unblock(player.getUniqueId());
     }
 
     @Test

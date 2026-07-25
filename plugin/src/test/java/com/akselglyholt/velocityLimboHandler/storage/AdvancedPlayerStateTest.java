@@ -2,6 +2,7 @@ package com.akselglyholt.velocityLimboHandler.storage;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.managers.ReconnectHandler;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
@@ -208,7 +209,8 @@ class AdvancedPlayerStateTest {
                 playerManager,
                 authManager,
                 configManager,
-                reconnectHandler
+                reconnectHandler,
+                mock(VelocityLimboApiImpl.class)
         );
 
         task.run();
@@ -245,7 +247,8 @@ class AdvancedPlayerStateTest {
                 playerManager,
                 authManager,
                 configManager,
-                reconnectHandler
+                reconnectHandler,
+                mock(VelocityLimboApiImpl.class)
         );
 
         task.run();
@@ -276,7 +279,8 @@ class AdvancedPlayerStateTest {
                 playerManager,
                 authManager,
                 configManager,
-                reconnectHandler
+                reconnectHandler,
+                mock(VelocityLimboApiImpl.class)
         );
 
         task.run();

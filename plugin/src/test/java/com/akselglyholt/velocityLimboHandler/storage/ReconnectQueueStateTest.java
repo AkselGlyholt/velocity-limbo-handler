@@ -50,6 +50,21 @@ class ReconnectQueueStateTest {
     }
 
     @Test
+    void queueViewsReportTheStoredOrderingTierAfterPermissionsChange() {
+        Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
+        ReconnectQueueState state = new ReconnectQueueState(id -> {
+        }, activePlayers::get);
+        RegisteredServer server = mockServer("survival");
+        Player player = mockPlayer(UUID.randomUUID(), "Player", activePlayers);
+        when(player.hasPermission(anyString())).thenReturn(false);
+        state.enqueue(player, server);
+
+        when(player.hasPermission("vlh.queue.priority")).thenReturn(true);
+
+        assertEquals(QueueTier.NORMAL, state.getQueueForServer("survival").getFirst().tier());
+    }
+
+    @Test
     void getQueuePosition_skipsAndRemovesStaleEntries() {
         Map<UUID, Player> activePlayers = new ConcurrentHashMap<>();
         List<UUID> removedStale = new ArrayList<>();

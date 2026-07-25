@@ -3,6 +3,7 @@ package com.akselglyholt.velocityLimboHandler.listeners;
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
+import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.KickedFromServerEvent;
@@ -17,6 +18,13 @@ import java.net.InetSocketAddress;
 import java.util.List;
 
 public class ConnectionListener {
+    private final VelocityLimboApiImpl api;
+    private final PlayerManager playerManager;
+
+    public ConnectionListener(VelocityLimboApiImpl api, PlayerManager playerManager) {
+        this.api = api;
+        this.playerManager = playerManager;
+    }
 
     /**
      * Recovers players who lose the backend they are currently on without affecting normal joins
@@ -49,16 +57,15 @@ public class ConnectionListener {
         }
 
         // If the plugin is the one moving the player, let them pass!
-        if (VelocityLimboHandler.getPlayerManager().isPlayerConnecting(player)) {
+        if (api.isConnectionClaimed(player) || playerManager.isPlayerConnecting(player)) {
             return;
         }
 
         // Holds block the affected player or destination, including queue-bypass players.
-        if (VelocityLimboHandler.getPlayerManager().isPlayerHeld(player.getUniqueId())
-                || VelocityLimboHandler.getPlayerManager().isServerHeld(intendedServer.getServerInfo().getName())
-                || VelocityLimboHandler.getPlayerManager().hasQueuedPlayers(intendedServer)) {
-            VelocityLimboApiImpl api = VelocityLimboHandler.getApiImplementation();
-            if (api != null) api.recordRerouteIntent(player, intendedServer);
+        if (api.isPlayerHeld(player.getUniqueId())
+                || api.isServerHeld(intendedServer.getServerInfo().getName())
+                || playerManager.hasQueuedPlayers(intendedServer)) {
+            api.recordRerouteIntent(player, intendedServer);
             event.setResult(ServerPreConnectEvent.ServerResult.allowed(limbo));
 
             Utility.logDebug(() -> String.format("Rerouting %s to Limbo (Server %s is queued)",
@@ -81,9 +88,8 @@ public class ConnectionListener {
 
         // Remove player from queue if they left Limbo and joined another server
         if (previousServer != null && Utility.doServerNamesMatch(previousServer, limbo)) {
-            VelocityLimboApiImpl api = VelocityLimboHandler.getApiImplementation();
-            if (api != null) api.onPlayerLeft(player);
-            VelocityLimboHandler.getPlayerManager().removePlayer(player);
+            api.onPlayerLeft(player, currentServer);
+            VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
             return;
         }
 
@@ -137,22 +143,14 @@ public class ConnectionListener {
             Utility.logDebug(() -> String.format("%s will be queued for '%s'",
                     player.getUsername(), queuedTarget.getServerInfo().getName()));
 
-            VelocityLimboApiImpl api = VelocityLimboHandler.getApiImplementation();
-            if (api != null) {
-                api.onPlayerArrived(player, intendedTarget);
-            } else {
-                VelocityLimboHandler.getPlayerManager().addPlayer(player, intendedTarget);
-            }
+            api.onPlayerArrived(player, intendedTarget);
         }
     }
 
     @Subscribe
     public void onDisconnect(@NotNull DisconnectEvent event) {
         Player player = event.getPlayer();
-        VelocityLimboApiImpl api = VelocityLimboHandler.getApiImplementation();
-        if (api != null) api.onPlayerDisconnected(player);
-        VelocityLimboHandler.getPlayerManager().removePlayer(player);
-        VelocityLimboHandler.getPlayerManager().removePlayerIssue(player);
+        api.onPlayerDisconnected(player);
         VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
     }
 }

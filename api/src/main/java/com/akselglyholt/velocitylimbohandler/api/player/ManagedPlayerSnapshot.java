@@ -10,7 +10,10 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
 
-/** Immutable view of all public state for a managed player. */
+/**
+ * Immutable view of all public state for a managed player.
+ * {@code revision} identifies the API-managed state observed while constructing this snapshot.
+ */
 public record ManagedPlayerSnapshot(UUID playerId, String username, LimboPhase phase, String destination,
                                     OptionalInt position, Optional<QueueTier> tier,
                                     Optional<String> connectionIssue, List<HoldSnapshot> playerHolds,

@@ -1,17 +1,15 @@
 package com.akselglyholt.velocityLimboHandler.storage;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
-import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
-import com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability;
-import com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import dev.dejvokep.boostedyaml.route.Route;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -19,7 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class PlayerManager {
     private static final long PRUNE_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
 
-    public record QueuedPlayer(UUID uuid, String name) {
+    public record QueuedPlayer(UUID uuid, String name, QueueTier tier) {
     }
 
     private final PlayerConnectionState connectionState = new PlayerConnectionState();
@@ -29,14 +27,9 @@ public class PlayerManager {
     );
     private final AtomicLong nextPruneAtNanos = new AtomicLong();
     private volatile String queuePositionMsg;
-    private volatile VelocityLimboApiImpl api;
 
     public PlayerManager() {
         reloadMessages();
-    }
-
-    public void attachApi(VelocityLimboApiImpl api) {
-        this.api = api;
     }
 
     private boolean isAuthBlocked(Player player) {
@@ -99,7 +92,6 @@ public class PlayerManager {
         UUID playerId = player.getUniqueId();
         reconnectQueueState.removePlayer(playerId);
         removePlayerState(playerId);
-        VelocityLimboHandler.getReconnectBlocker().unblock(playerId);
     }
 
     public RegisteredServer getPreviousServer(Player player) {
@@ -138,8 +130,6 @@ public class PlayerManager {
 
     public void addPlayerWithIssue(Player player, String issue) {
         connectionState.addConnectionIssue(player.getUniqueId(), issue);
-        VelocityLimboApiImpl currentApi = api;
-        if (currentApi != null) currentApi.setConnectionIssue(player, true);
     }
 
     public boolean hasConnectionIssue(Player player) {
@@ -156,8 +146,6 @@ public class PlayerManager {
 
     public void removePlayerIssue(Player player) {
         connectionState.removeConnectionIssue(player.getUniqueId());
-        VelocityLimboApiImpl currentApi = api;
-        if (currentApi != null) currentApi.setConnectionIssue(player, false);
     }
 
     public void pruneInactivePlayers() {
@@ -197,6 +185,10 @@ public class PlayerManager {
         return reconnectQueueState.getQueueSize(serverName);
     }
 
+    public Optional<QueueTier> getQueueTier(UUID playerId, String serverName) {
+        return reconnectQueueState.getQueueTier(playerId, serverName);
+    }
+
     public List<QueuedPlayer> getQueueForServer(String serverName) {
         return reconnectQueueState.getQueueForServer(serverName);
     }
@@ -211,44 +203,6 @@ public class PlayerManager {
 
     public void setPlayerConnecting(Player player, Boolean add) {
         connectionState.setConnecting(player.getUniqueId(), add);
-    }
-
-    public boolean tryClaimConnection(Player player) {
-        VelocityLimboApiImpl currentApi = api;
-        if (currentApi != null && currentApi.availability() == Availability.READY) {
-            if (!currentApi.tryClaimConnection(player)) return false;
-            connectionState.setConnecting(player.getUniqueId(), true);
-            return true;
-        }
-        if (isPlayerConnecting(player)) return false;
-        setPlayerConnecting(player, true);
-        return true;
-    }
-
-    public boolean usesApiLifecycle() {
-        VelocityLimboApiImpl currentApi = api;
-        return currentApi != null && currentApi.availability() == Availability.READY;
-    }
-
-    public void finishConnectionAttempt(Player player, String destination, ReconnectOutcome outcome, String failure) {
-        connectionState.setConnecting(player.getUniqueId(), false);
-        VelocityLimboApiImpl currentApi = api;
-        if (currentApi != null) currentApi.finishConnectionAttempt(player, destination, outcome, failure);
-    }
-
-    public boolean isPlayerHeld(UUID playerId) {
-        VelocityLimboApiImpl currentApi = api;
-        return currentApi != null && currentApi.isPlayerHeld(playerId);
-    }
-
-    public boolean isServerHeld(String serverName) {
-        VelocityLimboApiImpl currentApi = api;
-        return currentApi != null && currentApi.isServerHeld(serverName);
-    }
-
-    public void setAuthenticationBlocked(UUID playerId, boolean blocked, String reason) {
-        VelocityLimboApiImpl currentApi = api;
-        if (currentApi != null) currentApi.setAuthenticationBlocked(playerId, blocked, reason);
     }
 
     public void retargetPlayer(Player player, RegisteredServer server, boolean enqueue) {

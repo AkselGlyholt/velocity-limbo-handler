@@ -5,7 +5,10 @@ import com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot;
 import java.util.List;
 import java.util.Objects;
 
-/** Immutable ordered view of one destination queue. */
+/**
+ * Immutable ordered view of one destination queue.
+ * {@code revision} identifies the API-managed state observed while constructing this snapshot.
+ */
 public record QueueSnapshot(String destination, List<QueuedPlayerSnapshot> players,
                             List<HoldSnapshot> serverHolds, long revision) {
     public QueueSnapshot {

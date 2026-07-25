@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -142,6 +143,11 @@ final class ReconnectQueueState {
     int getQueueSize(String serverName) {
         ServerQueue serverQueue = getServerQueue(serverName);
         return serverQueue == null ? 0 : serverQueue.size();
+    }
+
+    Optional<QueueTier> getQueueTier(UUID playerId, String serverName) {
+        ServerQueue serverQueue = getServerQueue(serverName);
+        return serverQueue == null ? Optional.empty() : serverQueue.tier(playerId);
     }
 
     List<PlayerManager.QueuedPlayer> getQueueForServer(String serverName) {

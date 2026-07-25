@@ -1,10 +1,12 @@
 package com.akselglyholt.velocityLimboHandler.managers;
 
 import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome;
+import com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability;
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.OptionalLong;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,6 +34,7 @@ class ReconnectHandlerTest {
     private Player player;
     private RegisteredServer server;
     private ReconnectHandler reconnectHandler;
+    private VelocityLimboApiImpl api;
     private MockedStatic<Utility> utility;
 
     @BeforeEach
@@ -43,6 +47,7 @@ class ReconnectHandlerTest {
         AuthManager authManager = mock(AuthManager.class);
         ConfigManager configManager = mock(ConfigManager.class);
         Logger logger = mock(Logger.class);
+        api = mock(VelocityLimboApiImpl.class);
         utility = mockStatic(Utility.class);
 
         when(player.isActive()).thenReturn(true);
@@ -56,7 +61,8 @@ class ReconnectHandlerTest {
                 authManager,
                 configManager,
                 logger,
-                healthTracker
+                healthTracker,
+                api
         );
     }
 
@@ -131,8 +137,8 @@ class ReconnectHandlerTest {
     void connectionInProgressReleasesApiClaim() {
         ConnectionRequestBuilder request = mock(ConnectionRequestBuilder.class);
         ConnectionRequestBuilder.Result result = mock(ConnectionRequestBuilder.Result.class);
-        when(playerManager.usesApiLifecycle()).thenReturn(true);
-        when(playerManager.tryClaimConnection(player)).thenReturn(true);
+        when(api.availability()).thenReturn(Availability.READY);
+        when(api.tryClaimConnection(player)).thenReturn(OptionalLong.of(42));
         when(healthTracker.probe(server)).thenReturn(
                 CompletableFuture.completedFuture(new BackendHealthTracker.Availability(true, false, 5))
         );
@@ -142,8 +148,8 @@ class ReconnectHandlerTest {
 
         assertTrue(reconnectHandler.reconnectPlayer(player));
 
-        verify(playerManager).finishConnectionAttempt(
-                player, "survival", ReconnectOutcome.CONNECTION_IN_PROGRESS, null
+        verify(api).finishConnectionAttempt(
+                player, 42, "survival", ReconnectOutcome.CONNECTION_IN_PROGRESS, null
         );
     }
 
@@ -167,7 +173,7 @@ class ReconnectHandlerTest {
         when(healthTracker.probe(server)).thenReturn(probe);
 
         assertTrue(reconnectHandler.reconnectPlayer(player));
-        when(playerManager.isServerHeld("survival")).thenReturn(true);
+        when(api.isServerHeld("survival")).thenReturn(true);
         probe.complete(new BackendHealthTracker.Availability(true, false, 5));
 
         verify(player, never()).createConnectionRequest(server);

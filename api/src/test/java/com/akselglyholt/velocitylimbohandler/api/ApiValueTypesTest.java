@@ -1,6 +1,8 @@
 package com.akselglyholt.velocitylimbohandler.api;
 
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest;
+import com.akselglyholt.velocitylimbohandler.api.entry.EnterResult;
+import com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus;
 import com.akselglyholt.velocitylimbohandler.api.events.ServerHoldChangedEvent;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldLease;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
@@ -49,6 +51,18 @@ class ApiValueTypesTest {
         assertThrows(NullPointerException.class, () -> EnterRequest.destination(null));
         assertThrows(IllegalArgumentException.class, () -> EnterRequest.destination(" \t "));
         assertThrows(NullPointerException.class, () -> EnterRequest.currentServer().withInitialHold(null));
+    }
+
+    @Test
+    void enterResultsExposeOnlySuccessfulInitialHolds() {
+        HoldLease lease = UUID::randomUUID;
+
+        assertSame(lease, EnterResult.success(Optional.of(lease)).initialHold().orElseThrow());
+        assertEquals(EnterStatus.SUCCESS, EnterResult.success(Optional.empty()).status());
+        assertEquals(EnterStatus.NOT_READY, EnterResult.failed(EnterStatus.NOT_READY).status());
+        assertThrows(IllegalArgumentException.class,
+                () -> new EnterResult(EnterStatus.CONNECTION_FAILURE, Optional.of(lease)));
+        assertThrows(IllegalArgumentException.class, () -> EnterResult.failed(EnterStatus.SUCCESS));
     }
 
     @Test
