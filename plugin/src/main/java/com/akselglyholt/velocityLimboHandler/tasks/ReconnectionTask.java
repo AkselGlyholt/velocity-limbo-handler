@@ -19,7 +19,7 @@ import java.util.Map;
 
 public class ReconnectionTask implements Runnable {
     private final ProxyServer proxyServer;
-    private final RegisteredServer limboServer;
+    private final String limboServerName;
     private final PlayerManager playerManager;
     private final AuthManager authManager;
     private final ConfigManager configManager;
@@ -30,8 +30,15 @@ public class ReconnectionTask implements Runnable {
     public ReconnectionTask(ProxyServer proxyServer, RegisteredServer limboServer, PlayerManager playerManager,
                             AuthManager authManager, ConfigManager configManager, ReconnectHandler reconnectHandler,
                             VelocityLimboApiImpl api) {
+        this(proxyServer, limboServer.getServerInfo().getName(), playerManager, authManager,
+                configManager, reconnectHandler, api);
+    }
+
+    public ReconnectionTask(ProxyServer proxyServer, String limboServerName, PlayerManager playerManager,
+                            AuthManager authManager, ConfigManager configManager, ReconnectHandler reconnectHandler,
+                            VelocityLimboApiImpl api) {
         this.proxyServer = proxyServer;
-        this.limboServer = limboServer;
+        this.limboServerName = limboServerName;
         this.playerManager = playerManager;
         this.authManager = authManager;
         this.configManager = configManager;
@@ -41,6 +48,9 @@ public class ReconnectionTask implements Runnable {
 
     @Override
     public void run() {
+        RegisteredServer limboServer = proxyServer.getServer(limboServerName).orElse(null);
+        if (limboServer == null) return;
+
         // Prevent unnecessary processing when no players are connected
         Collection<Player> connectedPlayers = limboServer.getPlayersConnected();
         if (connectedPlayers.isEmpty()) return;

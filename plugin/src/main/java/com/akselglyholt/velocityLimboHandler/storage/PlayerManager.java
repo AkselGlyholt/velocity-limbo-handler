@@ -42,6 +42,10 @@ public class PlayerManager {
     }
 
     public void addPlayer(Player player, RegisteredServer registeredServer) {
+        addPlayerByName(player, registeredServer.getServerInfo().getName());
+    }
+
+    private void addPlayerByName(Player player, String serverName) {
         UUID playerId = player.getUniqueId();
         if (connectionState.isRegistered(playerId)) {
             Utility.logDebug(() -> String.format(
@@ -56,7 +60,6 @@ public class PlayerManager {
             return;
         }
 
-        String serverName = registeredServer.getServerInfo().getName();
         connectionState.registerPlayer(playerId, serverName);
 
         Utility.logDebug(() -> String.format(
@@ -65,25 +68,33 @@ public class PlayerManager {
         Utility.sendWelcomeMessage(player, null);
 
         if (VelocityLimboHandler.isQueueEnabled()) {
-            reconnectQueueState.enqueue(player, registeredServer);
+            reconnectQueueState.enqueue(player, serverName);
             player.sendMessage(MessageFormatter.formatComponent(queuePositionMsg, player));
         }
     }
 
     /** Registers arrival without admitting to the queue; API event handlers run between these operations. */
     public void registerPlayerInLimbo(Player player, RegisteredServer registeredServer) {
+        registerPlayerInLimboByName(player, registeredServer.getServerInfo().getName());
+    }
+
+    public void registerPlayerInLimboByName(Player player, String serverName) {
         UUID playerId = player.getUniqueId();
-        connectionState.registerPlayer(playerId, registeredServer.getServerInfo().getName());
+        connectionState.registerPlayer(playerId, serverName);
         Utility.logDebug(() -> String.format("%s joined limbo — destination %s",
-                player.getUsername(), registeredServer.getServerInfo().getName()));
+                player.getUsername(), serverName));
         Utility.sendWelcomeMessage(player, null);
     }
 
     /** Appends a player to their freshly evaluated permission tier when queueing is enabled. */
     public void admitPlayer(Player player, RegisteredServer registeredServer) {
-        connectionState.registerPlayer(player.getUniqueId(), registeredServer.getServerInfo().getName());
+        admitPlayerByName(player, registeredServer.getServerInfo().getName());
+    }
+
+    public void admitPlayerByName(Player player, String serverName) {
+        connectionState.registerPlayer(player.getUniqueId(), serverName);
         if (VelocityLimboHandler.isQueueEnabled()) {
-            reconnectQueueState.enqueue(player, registeredServer);
+            reconnectQueueState.enqueue(player, serverName);
             player.sendMessage(MessageFormatter.formatComponent(queuePositionMsg, player));
         }
     }
@@ -95,9 +106,15 @@ public class PlayerManager {
     }
 
     public RegisteredServer getPreviousServer(Player player) {
-        return connectionState.getRegisteredServer(player.getUniqueId())
-                .flatMap(serverName -> VelocityLimboHandler.getProxyServer().getServer(serverName))
-                .orElse(VelocityLimboHandler.getDirectConnectServer());
+        String serverName = getPreviousServerName(player);
+        if (serverName != null) {
+            return VelocityLimboHandler.getProxyServer().getServer(serverName).orElse(null);
+        }
+        return VelocityLimboHandler.getDirectConnectServer();
+    }
+
+    public String getPreviousServerName(Player player) {
+        return connectionState.getRegisteredServer(player.getUniqueId()).orElse(null);
     }
 
     public boolean isPlayerRegistered(Player player) {
@@ -121,11 +138,11 @@ public class PlayerManager {
     }
 
     public int getQueuePosition(Player player) {
-        RegisteredServer previousServer = getPreviousServer(player);
-        if (previousServer == null) {
+        String serverName = getPreviousServerName(player);
+        if (serverName == null) {
             return -1;
         }
-        return reconnectQueueState.getQueuePosition(player.getUniqueId(), previousServer.getServerInfo().getName());
+        return reconnectQueueState.getQueuePosition(player.getUniqueId(), serverName);
     }
 
     public void addPlayerWithIssue(Player player, String issue) {
@@ -206,10 +223,14 @@ public class PlayerManager {
     }
 
     public void retargetPlayer(Player player, RegisteredServer server, boolean enqueue) {
+        retargetPlayerByName(player, server.getServerInfo().getName(), enqueue);
+    }
+
+    public void retargetPlayerByName(Player player, String serverName, boolean enqueue) {
         reconnectQueueState.removePlayer(player.getUniqueId());
-        connectionState.registerPlayer(player.getUniqueId(), server.getServerInfo().getName());
+        connectionState.registerPlayer(player.getUniqueId(), serverName);
         if (enqueue && VelocityLimboHandler.isQueueEnabled()) {
-            reconnectQueueState.enqueue(player, server);
+            reconnectQueueState.enqueue(player, serverName);
         }
     }
 

@@ -122,19 +122,20 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
         bstatsMetrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
             @Override
             public Integer call() {
-                return limboServer.getPlayersConnected().size();
+                RegisteredServer currentLimbo = getLimboServer();
+                return currentLimbo == null ? 0 : currentLimbo.getPlayersConnected().size();
             }
         }));
 
-        authManager = new AuthManager(this, proxyServer, reconnectBlocker, api);
+        authManager = new AuthManager(this, proxyServer, reconnectBlocker, playerManager, api);
         reconnectHandler = new ReconnectHandler(playerManager, authManager, configManager, logger, api);
 
-        eventManger.register(this, new ConnectionListener(api, playerManager));
+        eventManger.register(this, new ConnectionListener(api, playerManager, reconnectBlocker));
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker, configManager));
 
         proxyServer.getCommandManager().register(
                 proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(),
-                new VlhAdminCommand(api));
+                new VlhAdminCommand(api, playerManager));
 
         getLogger().info("Queue Enabled: " + configManager.isQueueEnabled());
 
@@ -165,17 +166,17 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
         directConnectServer = Utility.getServerByName(directConnectName);
 
         if (limboServer == null || directConnectServer == null) {
-            logger.warning("Skipping task scheduling: limbo or direct connect server is missing.");
-            return;
+            logger.warning("A configured server is currently missing; scheduled tasks will wait for it to reappear.");
         }
 
         reconnectionTask = proxyServer.getScheduler().buildTask(this,
-                new ReconnectionTask(proxyServer, limboServer, playerManager, authManager,
+                new ReconnectionTask(proxyServer, limboName, playerManager, authManager,
                         configManager, reconnectHandler, api))
                 .repeat(configManager.getTaskInterval(), TimeUnit.MILLISECONDS).schedule();
 
         queueNotifierTask = proxyServer.getScheduler()
-                .buildTask(this, new QueueNotifierTask(proxyServer, limboServer, playerManager, configManager, api))
+                .buildTask(this, new QueueNotifierTask(
+                        proxyServer, limboName, playerManager, configManager, api))
                 .repeat(1, TimeUnit.SECONDS)
                 .schedule();
     }
@@ -234,10 +235,16 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
     }
 
     public static RegisteredServer getLimboServer() {
+        if (proxyServer != null && instance != null && instance.configManager != null) {
+            return proxyServer.getServer(instance.configManager.getLimboName()).orElse(null);
+        }
         return limboServer;
     }
 
     public static RegisteredServer getDirectConnectServer() {
+        if (proxyServer != null && instance != null && instance.configManager != null) {
+            return proxyServer.getServer(instance.configManager.getDirectConnectServerName()).orElse(null);
+        }
         return directConnectServer;
     }
 
@@ -263,8 +270,8 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
         return authManager;
     }
 
-    public static ConfigManager getConfigManager() {
-        return instance.configManager;
+    public static @Nullable ConfigManager getConfigManager() {
+        return instance == null ? null : instance.configManager;
     }
 
     public static boolean isQueueEnabled() {

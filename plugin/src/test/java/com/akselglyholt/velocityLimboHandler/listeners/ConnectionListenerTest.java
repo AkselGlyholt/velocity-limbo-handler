@@ -56,16 +56,16 @@ class ConnectionListenerTest {
         configManager = mock(ConfigManager.class);
         api = mock(VelocityLimboApiImpl.class);
 
-        mockedVelocityLimboHandler.when(VelocityLimboHandler::getPlayerManager).thenReturn(playerManager);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getProxyServer).thenReturn(proxyServer);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getLimboServer).thenReturn(limboServer);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getDirectConnectServer).thenReturn(directConnectServer);
-        mockedVelocityLimboHandler.when(VelocityLimboHandler::getReconnectBlocker).thenReturn(reconnectBlocker);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getLogger).thenReturn(logger);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getMessageConfig).thenReturn(messageConfig);
         mockedVelocityLimboHandler.when(VelocityLimboHandler::getConfigManager).thenReturn(configManager);
 
         when(configManager.isDebugEnabled()).thenReturn(false);
+        when(configManager.getLimboName()).thenReturn("limbo");
+        when(configManager.getDirectConnectServerName()).thenReturn("hub");
 
         when(messageConfig.getString(any(Route.class))).thenReturn("Welcome!");
 
@@ -78,7 +78,7 @@ class ConnectionListenerTest {
         when(directInfo.getName()).thenReturn("hub");
         when(directConnectServer.getServerInfo()).thenReturn(directInfo);
 
-        connectionListener = new ConnectionListener(api, playerManager);
+        connectionListener = new ConnectionListener(api, playerManager, reconnectBlocker);
     }
 
     @AfterEach
@@ -145,6 +145,7 @@ class ConnectionListenerTest {
         verify(event).setResult(argThat(result ->
                 result.getServer().isPresent() && result.getServer().get().equals(limboServer)
         ));
+        verify(api).recordRerouteIntent(player, intendedServer);
     }
 
     @Test
@@ -163,7 +164,29 @@ class ConnectionListenerTest {
 
         connectionListener.onPlayerPostConnect(event);
 
-        verify(api).onPlayerArrived(player, directConnectServer);
+        verify(api).onPlayerArrived(player, "hub");
+    }
+
+    @Test
+    void testOnPlayerPostConnect_PreservesUnavailableForcedHostTarget() {
+        ServerPostConnectEvent event = mock(ServerPostConnectEvent.class);
+        Player player = mock(Player.class);
+        ServerConnection serverConnection = mock(ServerConnection.class);
+        ProxyConfig proxyConfig = mock(ProxyConfig.class);
+
+        when(event.getPlayer()).thenReturn(player);
+        when(player.getUsername()).thenReturn("Tester");
+        when(player.getCurrentServer()).thenReturn(Optional.of(serverConnection));
+        when(serverConnection.getServer()).thenReturn(limboServer);
+        when(event.getPreviousServer()).thenReturn(null);
+        when(player.getVirtualHost()).thenReturn(Optional.of(new InetSocketAddress("play.example.com", 25565)));
+        when(proxyServer.getConfiguration()).thenReturn(proxyConfig);
+        when(proxyConfig.getForcedHosts()).thenReturn(Map.of("play.example.com", List.of("survival")));
+        when(proxyServer.getServer("survival")).thenReturn(Optional.empty());
+
+        connectionListener.onPlayerPostConnect(event);
+
+        verify(api).onPlayerArrived(player, "survival");
     }
     
     @Test

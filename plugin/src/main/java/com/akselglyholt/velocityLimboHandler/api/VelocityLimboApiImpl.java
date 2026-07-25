@@ -36,6 +36,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -70,6 +71,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private final ProxyServer proxy;
     private final VelocityLimboHandler plugin;
     private final PlayerManager playerManager;
+    private final Clock clock;
     private final Map<UUID, ManagedState> players = new HashMap<>();
     private final Map<UUID, EntryIntent> entryIntents = new HashMap<>();
     private final Map<UUID, LeaseRecord> leases = new LinkedHashMap<>();
@@ -88,9 +90,14 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private long connectionAttemptGeneration;
 
     public VelocityLimboApiImpl(ProxyServer proxy, VelocityLimboHandler plugin, PlayerManager playerManager) {
+        this(proxy, plugin, playerManager, Clock.systemUTC());
+    }
+
+    VelocityLimboApiImpl(ProxyServer proxy, VelocityLimboHandler plugin, PlayerManager playerManager, Clock clock) {
         this.proxy = Objects.requireNonNull(proxy, "proxy");
         this.plugin = Objects.requireNonNull(plugin, "plugin");
         this.playerManager = Objects.requireNonNull(playerManager, "playerManager");
+        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     @Override
@@ -158,6 +165,11 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     public CompletionStage<Void> onPlayerArrived(Player player, RegisteredServer fallbackDestination) {
+        Objects.requireNonNull(fallbackDestination, "fallbackDestination");
+        return onPlayerArrived(player, fallbackDestination.getServerInfo().getName());
+    }
+
+    public CompletionStage<Void> onPlayerArrived(Player player, String fallbackDestination) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(fallbackDestination, "fallbackDestination");
         if (proxy.getPlayer(player.getUniqueId()).filter(current -> current == player && current.isActive()).isEmpty()) {
@@ -170,10 +182,10 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                 intent = null;
             }
             if (intent != null && !intent.apiEntry
-                    && intent.createdAt.plusSeconds(INCIDENTAL_INTENT_MAX_AGE_SECONDS).isBefore(Instant.now())) {
+                    && intent.createdAt.plusSeconds(INCIDENTAL_INTENT_MAX_AGE_SECONDS).isBefore(clock.instant())) {
                 intent = null;
             }
-            String destination = intent == null ? fallbackDestination.getServerInfo().getName() : intent.destination;
+            String destination = intent == null ? fallbackDestination : intent.destination;
             ManagedState state = players.get(player.getUniqueId());
             if (state == null || state.player != player
                     || (intent != null && intent.apiEntry && state.generation != intent.lifecycleGeneration)) {
@@ -187,7 +199,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             state.destination = destination;
             state.phase = LimboPhase.ADMITTING;
             revision++;
-            playerManager.registerPlayerInLimbo(player, requireRegisteredServer(destination));
+            playerManager.registerPlayerInLimboByName(player, destination);
             entered = snapshotLocked(player.getUniqueId());
         }
 
@@ -219,7 +231,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             ManagedState state = players.get(player.getUniqueId());
             if (state == null) {
                 entryIntents.put(player.getUniqueId(), new EntryIntent(
-                        intendedServer.getServerInfo().getName(), false, Instant.now(), player, 0));
+                        intendedServer.getServerInfo().getName(), false, clock.instant(), player, 0));
                 return;
             }
             if (state.player != player) return;
@@ -253,7 +265,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             } else if (issue) {
                 state.phase = LimboPhase.CONNECTION_ISSUE;
             } else {
-                playerManager.admitPlayer(player, requireRegisteredServer(state.destination));
+                playerManager.admitPlayerByName(player, state.destination);
                 state.phase = LimboPhase.WAITING;
             }
             revision++;
@@ -379,7 +391,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     private void rememberDetachedAttemptLocked(long attemptId, Player player, String destination) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         detachedConnectionAttempts.values().removeIf(attempt ->
                 attempt.detachedAt.plusSeconds(DETACHED_ATTEMPT_MAX_AGE_SECONDS).isBefore(now));
         while (detachedConnectionAttempts.size() >= MAX_DETACHED_ATTEMPTS) {
@@ -394,7 +406,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private DetachedConnectionAttempt takeDetachedAttemptLocked(long attemptId, Player player) {
         DetachedConnectionAttempt attempt = detachedConnectionAttempts.remove(attemptId);
         if (attempt == null || attempt.player != player
-                || attempt.detachedAt.plusSeconds(DETACHED_ATTEMPT_MAX_AGE_SECONDS).isBefore(Instant.now())) {
+                || attempt.detachedAt.plusSeconds(DETACHED_ATTEMPT_MAX_AGE_SECONDS).isBefore(clock.instant())) {
             return null;
         }
         return attempt;
@@ -407,6 +419,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             ManagedState state = players.get(player.getUniqueId());
             if (state == null || state.player != player) return;
             before = snapshotLocked(player.getUniqueId());
+            boolean recovering = issue == null && state.phase == LimboPhase.CONNECTION_ISSUE;
             if (issue != null) {
                 playerManager.addPlayerWithIssue(player, issue);
                 playerManager.removePlayerFromQueue(player);
@@ -417,6 +430,9 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             if (issue == null && hasPlayerHoldsLocked(player.getUniqueId())) {
                 state.phase = LimboPhase.HELD;
             } else if (issue == null && state.phase != LimboPhase.CONNECTING) {
+                if (recovering) {
+                    playerManager.admitPlayerByName(player, state.destination);
+                }
                 state.phase = LimboPhase.WAITING;
             }
             revision++;
@@ -505,16 +521,15 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         } catch (IllegalArgumentException exception) {
             return HoldResult.failed(HoldStatus.INVALID_TARGET);
         }
-        RegisteredServer server = proxy.getServer(serverName).orElse(null);
-        if (server == null) return HoldResult.failed(HoldStatus.UNKNOWN_SERVER);
         if (isLimboServer(serverName)) return HoldResult.failed(HoldStatus.INVALID_TARGET);
+        String holdTarget = canonicalServerName(serverName);
 
         expireDueLeases();
         LeaseRecord lease;
         List<HoldSnapshot> holds;
         long eventRevision;
         synchronized (lock) {
-            lease = newLease(ownerId, HoldTarget.SERVER, server.getServerInfo().getName(), request);
+            lease = newLease(ownerId, HoldTarget.SERVER, holdTarget, request);
             addLeaseLocked(lease);
             eventRevision = ++revision;
             holds = serverHoldsLocked(lease.target);
@@ -564,7 +579,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         if (playerManager.hasConnectionIssue(player)) {
             state.phase = LimboPhase.CONNECTION_ISSUE;
         } else {
-            playerManager.admitPlayer(player, requireRegisteredServer(state.destination));
+            playerManager.admitPlayerByName(player, state.destination);
             state.phase = LimboPhase.WAITING;
         }
         revision++;
@@ -577,8 +592,11 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         synchronized (lock) {
             ids = List.copyOf(ownerLeaseIds.getOrDefault(ownerId, new LinkedHashSet<>()));
         }
-        ids.forEach(id -> releaseLease(ownerId, id));
-        return ids.size();
+        int released = 0;
+        for (UUID id : ids) {
+            if (releaseLease(ownerId, id) == HoldReleaseResult.RELEASED) released++;
+        }
+        return released;
     }
 
     private RetargetResult retarget(UUID playerId, String requestedName) {
@@ -607,7 +625,8 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             entryIntents.computeIfPresent(playerId, (ignored, intent) ->
                     new EntryIntent(state.destination, intent.apiEntry, intent.createdAt,
                             intent.player, intent.lifecycleGeneration));
-            playerManager.retargetPlayer(player, server, state.phase == LimboPhase.WAITING && !hasPlayerHoldsLocked(playerId));
+            playerManager.retargetPlayerByName(player, state.destination,
+                    state.phase == LimboPhase.WAITING && !hasPlayerHoldsLocked(playerId));
             revision++;
             after = snapshotLocked(playerId);
         }
@@ -660,7 +679,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                         request.initialHold().orElseThrow()).lease();
             }
             entryIntents.put(player.getUniqueId(), new EntryIntent(
-                    state.destination, true, Instant.now(), player, generation));
+                    state.destination, true, clock.instant(), player, generation));
         }
 
         Optional<HoldLease> acquiredInitialLease = initialLease;
@@ -780,7 +799,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     private LeaseRecord newLease(String ownerId, HoldTarget targetType, String target, HoldRequest request) {
-        Instant acquired = Instant.now();
+        Instant acquired = clock.instant();
         return new LeaseRecord(UUID.randomUUID(), ownerId, targetType, target, request.reason(), acquired,
                 request.duration().map(acquired::plus), ++revision);
     }
@@ -809,7 +828,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         if (availability == Availability.STOPPING || expirations.isEmpty()) return;
 
         Instant nextExpiry = expirations.firstKey();
-        long delay = Math.max(1, nextExpiry.toEpochMilli() - Instant.now().toEpochMilli());
+        long delay = Math.max(1, nextExpiry.toEpochMilli() - clock.instant().toEpochMilli());
         expiryTaskAt = nextExpiry;
         try {
             expiryTask = proxy.getScheduler().buildTask(plugin, () -> expireDueLeases(generation))
@@ -820,7 +839,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         }
     }
 
-    private void expireDueLeases() {
+    void expireDueLeases() {
         expireDueLeases(-1);
     }
 
@@ -828,7 +847,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         List<ExpiredLeaseResult> expired = new ArrayList<>();
         synchronized (lock) {
             if (expectedGeneration >= 0 && expectedGeneration != expiryGeneration) return;
-            Instant now = Instant.now();
+            Instant now = clock.instant();
             if (expirations.isEmpty() || expirations.firstKey().isAfter(now)) {
                 if (expectedGeneration >= 0) scheduleNextExpiryLocked();
                 return;
@@ -914,10 +933,6 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         return serverName.toLowerCase(Locale.ROOT);
     }
 
-    private RegisteredServer requireRegisteredServer(String serverName) {
-        return proxy.getServer(serverName).orElseThrow(() -> new IllegalStateException("Server disappeared: " + serverName));
-    }
-
     private String canonicalServerName(String serverName) {
         return proxy.getServer(serverName).map(server -> server.getServerInfo().getName()).orElse(serverName);
     }
@@ -929,6 +944,10 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     private boolean isLimboServer(String name) {
+        var config = VelocityLimboHandler.getConfigManager();
+        if (config != null && config.getLimboName().equalsIgnoreCase(name)) {
+            return true;
+        }
         RegisteredServer limbo = VelocityLimboHandler.getLimboServer();
         return limbo != null && limbo.getServerInfo().getName().equalsIgnoreCase(name);
     }

@@ -48,15 +48,17 @@ class NLoginHandlerTest {
         api = mock(VelocityLimboApiImpl.class);
         RegisteredServer limbo = mock(RegisteredServer.class);
         intendedServer = mock(RegisteredServer.class);
+        ServerInfo limboInfo = mock(ServerInfo.class);
         ServerInfo intendedInfo = mock(ServerInfo.class);
         ServerConnection currentConnection = mock(ServerConnection.class);
         event = mock(ServerPreConnectEvent.class);
         player = mock(Player.class);
         playerId = UUID.randomUUID();
 
-        plugin.when(VelocityLimboHandler::getPlayerManager).thenReturn(playerManager);
         plugin.when(VelocityLimboHandler::getLogger).thenReturn(mock(Logger.class));
         plugin.when(VelocityLimboHandler::getLimboServer).thenReturn(limbo);
+        when(limbo.getServerInfo()).thenReturn(limboInfo);
+        when(limboInfo.getName()).thenReturn("limbo");
         when(proxy.getPluginManager()).thenReturn(pluginManager);
         when(pluginManager.getPlugin("nlogin")).thenReturn(Optional.empty());
         when(event.getPlayer()).thenReturn(player);
@@ -67,7 +69,7 @@ class NLoginHandlerTest {
         when(intendedServer.getServerInfo()).thenReturn(intendedInfo);
         when(intendedInfo.getName()).thenReturn("survival");
 
-        handler = new NLoginHandler(proxy, blocker, api);
+        handler = new NLoginHandler(proxy, blocker, playerManager, api);
     }
 
     @AfterEach
