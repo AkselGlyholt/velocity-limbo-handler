@@ -1,0 +1,295 @@
+package com.akselglyholt.velocityLimboHandler;
+
+import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
+import com.akselglyholt.velocityLimboHandler.commands.CommandBlockRule;
+import com.akselglyholt.velocityLimboHandler.commands.CommandBlocker;
+import com.akselglyholt.velocityLimboHandler.commands.VlhAdminCommand;
+import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
+import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
+import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
+import com.akselglyholt.velocityLimboHandler.managers.ReconnectHandler;
+import com.akselglyholt.velocityLimboHandler.misc.InMemoryReconnectBlocker;
+import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
+import com.akselglyholt.velocityLimboHandler.misc.Utility;
+import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
+import com.akselglyholt.velocityLimboHandler.tasks.QueueNotifierTask;
+import com.akselglyholt.velocityLimboHandler.tasks.ReconnectionTask;
+import com.google.inject.Inject;
+import com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi;
+import com.velocitypowered.api.event.EventManager;
+import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
+import com.velocitypowered.api.plugin.Dependency;
+import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.plugin.PluginContainer;
+import com.velocitypowered.api.plugin.annotation.DataDirectory;
+import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.server.RegisteredServer;
+import com.velocitypowered.api.scheduler.ScheduledTask;
+import dev.dejvokep.boostedyaml.YamlDocument;
+import org.bstats.charts.SingleLineChart;
+import org.bstats.velocity.Metrics;
+
+import javax.annotation.Nullable;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+@Plugin(id = "velocity-limbo-handler", name = "VelocityLimboHandler", authors = "Aksel Glyholt", version = VersionInfo.VERSION, dependencies = {
+        @Dependency(id = "librelogin", optional = true),
+        @Dependency(id = "libreloginnext", optional = true),
+        @Dependency(id = "nlogin", optional = true),
+        @Dependency(id = "maintenance", optional = true)
+})
+public class VelocityLimboHandler implements VelocityLimboApi.Provider {
+    private static final String API_V1_INTRODUCED_VERSION = "1.9.0";
+    private static VelocityLimboHandler instance;
+    private static ProxyServer proxyServer;
+    private static final Logger logger = Logger.getLogger("Limbo Handler");
+    private static RegisteredServer limboServer;
+    private static RegisteredServer directConnectServer;
+
+    private static PlayerManager playerManager;
+    private static CommandBlocker commandBlocker;
+    private static ReconnectBlocker reconnectBlocker;
+    private static AuthManager authManager;
+    private static VelocityLimboApiImpl api;
+
+    private ConfigManager configManager;
+    private ReconnectHandler reconnectHandler;
+    private ScheduledTask reconnectionTask;
+    private ScheduledTask queueNotifierTask;
+
+    private static boolean maintenancePluginPresent = false;
+    private static Object maintenanceAPI = null;
+
+    private final Metrics.Factory metricsFactory;
+
+    private @Nullable Metrics bstatsMetrics = null;
+
+    @Inject
+    public VelocityLimboHandler(ProxyServer server, @DataDirectory Path dataDirectory, Metrics.Factory metricsFactoryInstance) {
+        proxyServer = server;
+        instance = this;
+        metricsFactory = metricsFactoryInstance;
+
+        // Initialize ConfigManager
+        configManager = new ConfigManager(dataDirectory, logger);
+        try {
+            configManager.load((limboName, directConnectName) ->
+                    server.getServer(limboName).isPresent() && server.getServer(directConnectName).isPresent()
+            );
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, "Unable to load VelocityLimboHandler configuration", e);
+            throw new IllegalStateException("VelocityLimboHandler cannot start without a valid configuration", e);
+        }
+
+        playerManager = new PlayerManager();
+        api = new VelocityLimboApiImpl(server, this, playerManager);
+        commandBlocker = new CommandBlocker();
+        reconnectBlocker = new InMemoryReconnectBlocker(api);
+
+        initializeMaintenanceIntegration();
+    }
+
+    @Subscribe
+    public void onInitialize(ProxyInitializeEvent event) {
+        logger.info("Loading Limbo Handler!");
+
+        EventManager eventManger = proxyServer.getEventManager();
+
+        String limboName = configManager.getLimboName();
+        String directConnectName = configManager.getDirectConnectServerName();
+
+        limboServer = Utility.getServerByName(limboName);
+        directConnectServer = Utility.getServerByName(directConnectName);
+
+        // A server can disappear after constructor-time validation if Velocity's registry changes.
+        if (limboServer == null || directConnectServer == null) {
+            return;
+        }
+
+        // Initialize metrics and managers only after all required runtime dependencies exist.
+        int pluginId = 26682;
+        bstatsMetrics = metricsFactory.make(this, pluginId);
+        bstatsMetrics.addCustomChart(new SingleLineChart("players_in_limbo", new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                RegisteredServer currentLimbo = getLimboServer();
+                return currentLimbo == null ? 0 : currentLimbo.getPlayersConnected().size();
+            }
+        }));
+
+        authManager = new AuthManager(this, proxyServer, reconnectBlocker, playerManager, api);
+        reconnectHandler = new ReconnectHandler(playerManager, authManager, configManager, logger, api);
+
+        eventManger.register(this, new ConnectionListener(api, playerManager, reconnectBlocker));
+        eventManger.register(this, new CommandExecuteEventListener(commandBlocker, configManager));
+
+        proxyServer.getCommandManager().register(
+                proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(),
+                new VlhAdminCommand(api, playerManager));
+
+        getLogger().info("Queue Enabled: " + configManager.isQueueEnabled());
+
+        // Disabled commands
+        commandBlocker.replaceCommands(configManager.getDisabledCommands(), CommandBlockRule.onServer(limboName));
+
+        reloadTasks();
+        api.markReady();
+    }
+
+    @Subscribe
+    public void onShutdown(ProxyShutdownEvent event) {
+        if (api != null) api.shutdown();
+        cancelScheduledTasks();
+        if (bstatsMetrics != null) bstatsMetrics.shutdown();
+        if (reconnectHandler != null) reconnectHandler.close();
+        if (authManager != null) authManager.close();
+        Utility.clearMaintenanceAdapter();
+    }
+
+    public synchronized void reloadTasks() {
+        cancelScheduledTasks();
+
+        String limboName = configManager.getLimboName();
+        String directConnectName = configManager.getDirectConnectServerName();
+
+        limboServer = Utility.getServerByName(limboName);
+        directConnectServer = Utility.getServerByName(directConnectName);
+
+        if (limboServer == null || directConnectServer == null) {
+            logger.warning("A configured server is currently missing; scheduled tasks will wait for it to reappear.");
+        }
+
+        reconnectionTask = proxyServer.getScheduler().buildTask(this,
+                new ReconnectionTask(proxyServer, limboName, playerManager, authManager,
+                        configManager, reconnectHandler, api))
+                .repeat(configManager.getTaskInterval(), TimeUnit.MILLISECONDS).schedule();
+
+        queueNotifierTask = proxyServer.getScheduler()
+                .buildTask(this, new QueueNotifierTask(
+                        proxyServer, limboName, playerManager, configManager, api))
+                .repeat(1, TimeUnit.SECONDS)
+                .schedule();
+    }
+
+    private synchronized void cancelScheduledTasks() {
+        if (reconnectionTask != null) {
+            reconnectionTask.cancel();
+            reconnectionTask = null;
+        }
+
+        if (queueNotifierTask != null) {
+            queueNotifierTask.cancel();
+            queueNotifierTask = null;
+        }
+    }
+
+    public synchronized void applyReloadedConfiguration() {
+        playerManager.reloadMessages();
+        commandBlocker.replaceCommands(
+                configManager.getDisabledCommands(),
+                CommandBlockRule.onServer(configManager.getLimboName())
+        );
+        reloadTasks();
+    }
+
+    private void initializeMaintenanceIntegration() {
+        Optional<PluginContainer> maintenancePlugin = proxyServer.getPluginManager().getPlugin("maintenance");
+        if (maintenancePlugin.isPresent()) {
+            try {
+                // Load the MaintenanceProvider class
+                Class<?> providerClass = Class.forName("eu.kennytv.maintenance.api.MaintenanceProvider");
+
+                // Call MaintenanceProvider.get() - this directly returns the API instance
+                maintenanceAPI = providerClass.getMethod("get").invoke(null);
+
+                maintenancePluginPresent = true;
+                logger.info("Maintenance plugin detected and integrated successfully.");
+
+            } catch (Exception e) {
+                logger.warning("Failed to integrate with Maintenance plugin: " + e.getMessage());
+                maintenancePluginPresent = false;
+                maintenanceAPI = null;
+            }
+        } else {
+            logger.info("Maintenance plugin not detected - maintenance checks disabled.");
+        }
+    }
+
+    // Add getter methods for the maintenance API
+    public static boolean hasMaintenancePlugin() {
+        return maintenancePluginPresent;
+    }
+
+    public static Object getMaintenanceAPI() {
+        return maintenanceAPI;
+    }
+
+    public static RegisteredServer getLimboServer() {
+        if (proxyServer != null && instance != null && instance.configManager != null) {
+            return proxyServer.getServer(instance.configManager.getLimboName()).orElse(null);
+        }
+        return limboServer;
+    }
+
+    public static RegisteredServer getDirectConnectServer() {
+        if (proxyServer != null && instance != null && instance.configManager != null) {
+            return proxyServer.getServer(instance.configManager.getDirectConnectServerName()).orElse(null);
+        }
+        return directConnectServer;
+    }
+
+    public static ProxyServer getProxyServer() {
+        return proxyServer;
+    }
+
+    public static Logger getLogger() {
+        return logger;
+    }
+
+    /** @deprecated External plugins should use {@link VelocityLimboApi#get(ProxyServer)}. */
+    @Deprecated(forRemoval = false, since = API_V1_INTRODUCED_VERSION)
+    public static PlayerManager getPlayerManager() {
+        return playerManager;
+    }
+
+    public static YamlDocument getMessageConfig() {
+        return instance.configManager.getMessageConfig();
+    }
+
+    public static AuthManager getAuthManager() {
+        return authManager;
+    }
+
+    public static @Nullable ConfigManager getConfigManager() {
+        return instance == null ? null : instance.configManager;
+    }
+
+    public static boolean isQueueEnabled() {
+        return instance.configManager.isQueueEnabled();
+    }
+
+    public static VelocityLimboHandler getInstance() {
+        return instance;
+    }
+
+    /** @deprecated External plugins should use owner-scoped API holds. */
+    @Deprecated(forRemoval = false, since = API_V1_INTRODUCED_VERSION)
+    public static ReconnectBlocker getReconnectBlocker() {
+        return reconnectBlocker;
+    }
+
+    @Override
+    public VelocityLimboApi velocityLimboApi() {
+        return api;
+    }
+}

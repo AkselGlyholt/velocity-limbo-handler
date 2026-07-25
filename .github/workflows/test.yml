@@ -29,5 +29,34 @@ jobs:
         distribution: 'temurin'
         cache: maven
 
-    - name: Run Tests
-      run: mvn test -B
+    - name: Run reactor tests and install artifacts
+      run: mvn clean install -B
+
+    - name: Verify the API boundary
+      run: |
+        api_jar=$(find api/target -maxdepth 1 -type f \
+          -name 'velocity-limbo-handler-api-*.jar' \
+          ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print -quit)
+        plugin_jar=$(find plugin/target -maxdepth 1 -type f \
+          -name 'velocity-limbo-handler-*.jar' \
+          ! -name 'original-*' ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print -quit)
+
+        if [ -z "$api_jar" ] || [ ! -f "$api_jar" ]; then
+          echo "API JAR was not produced"
+          exit 1
+        fi
+        if [ -z "$plugin_jar" ] || [ ! -f "$plugin_jar" ]; then
+          echo "Plugin JAR was not produced"
+          exit 1
+        fi
+
+        if jar tf "$api_jar" | grep -q 'velocityLimboHandler/api'; then
+          echo "API artifact contains implementation classes"
+          exit 1
+        fi
+        jar tf "$plugin_jar" | grep -q 'com/akselglyholt/velocitylimbohandler/api/VelocityLimboApi.class'
+
+    - name: Compile an external API consumer
+      run: |
+        vlh_version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+        mvn test -B -f .github/consumer-smoke/pom.xml -Dvlh.version="$vlh_version"
