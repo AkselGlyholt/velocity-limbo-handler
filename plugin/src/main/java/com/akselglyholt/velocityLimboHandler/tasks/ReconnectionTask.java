@@ -44,80 +44,76 @@ public class ReconnectionTask implements Runnable {
         // Disconnect events normally clean state immediately; this is only a periodic safety net.
         playerManager.pruneInactivePlayersIfDue();
 
-        // Loop through all servers, if queue is enabled
-        Map<String, Boolean> maintenanceCache = new HashMap<>();
-
         if (configManager.isQueueEnabled()) {
-            List<String> queuedServerNames = new ArrayList<>(playerManager.getQueuedServerNames());
-            Collections.sort(queuedServerNames);
-            int serverCount = queuedServerNames.size();
-            if (serverCount == 0) {
-                return;
-            }
-
-            int startIndex = Math.floorMod(serverCursor, serverCount);
-            int batchSize = Math.min(serverCount, Math.max(1, configManager.getReconnectBatchSize()));
-            for (int offset = 0; offset < batchSize; offset++) {
-                String serverName = queuedServerNames.get((startIndex + offset) % serverCount);
-                RegisteredServer server = proxyServer.getServer(serverName).orElse(null);
-                if (server == null) {
-                    continue;
-                }
-                if (playerManager.isServerHeld(serverName)) {
-                    continue;
-                }
-
-                // Check if the server is in Maintenance mode
-                if (Utility.isServerInMaintenance(serverName)) {
-                    // Is in Maintenance mode, so find first player in queue that can join
-                    Player whitelistedPlayer = PlayerManager.findFirstMaintenanceAllowedPlayer(server);
-
-                    if (whitelistedPlayer != null && whitelistedPlayer.isActive()) {
-                        reconnectHandler.reconnectPlayer(whitelistedPlayer);
-                    }
-                } else {
-                    // Is not in Maintenance mode, so carry on with normal queue.
-                    Player nextPlayer = playerManager.getNextQueuedPlayer(server);
-                    if (nextPlayer == null) {
-                        continue;
-                    }
-
-                    reconnectHandler.reconnectPlayer(nextPlayer);
-                }
-            }
-            serverCursor = (startIndex + batchSize) % serverCount;
+            processQueueEnabled();
         } else {
-            for (Player player : connectedPlayers) {
-                if (!playerManager.hasConnectionIssue(player) && !playerManager.isPlayerHeld(player.getUniqueId())
-                        && player.isActive()) {
-                    // Check if the server is in maintenance mode
-                    RegisteredServer previousServer = playerManager.getPreviousServer(player);
-                    if (previousServer == null) {
-                        continue;
-                    }
-                    if (playerManager.isServerHeld(previousServer.getServerInfo().getName())) {
-                        continue;
-                    }
+            processQueueDisabled(connectedPlayers);
+        }
+    }
 
-                    if (isServerInMaintenance(previousServer, maintenanceCache)) {
-                        // Continue only if player does NOT have a maintenance bypass/whitelist entry
-                        boolean canBypassMaintenance = player.hasPermission("maintenance.admin")
-                                || player.hasPermission("maintenance.bypass")
-                                || player.hasPermission("maintenance.singleserver.bypass." + previousServer.getServerInfo().getName())
-                                || Utility.playerMaintenanceWhitelisted(player);
+    private void processQueueEnabled() {
+        List<String> queuedServerNames = new ArrayList<>(playerManager.getQueuedServerNames());
+        Collections.sort(queuedServerNames);
+        int serverCount = queuedServerNames.size();
+        if (serverCount == 0) {
+            return;
+        }
 
-                        if (!canBypassMaintenance) {
-                            continue;
-                        }
-                    }
+        int startIndex = Math.floorMod(serverCursor, serverCount);
+        int batchSize = Math.min(serverCount, Math.max(1, configManager.getReconnectBatchSize()));
+        for (int offset = 0; offset < batchSize; offset++) {
+            String serverName = queuedServerNames.get((startIndex + offset) % serverCount);
+            RegisteredServer server = proxyServer.getServer(serverName).orElse(null);
+            if (server == null || playerManager.isServerHeld(serverName)) {
+                continue;
+            }
 
-                    boolean reconnectAttempted = reconnectHandler.reconnectPlayer(player);
-                    if (reconnectAttempted) {
-                        break;
-                    }
+            if (Utility.isServerInMaintenance(serverName)) {
+                Player whitelistedPlayer = PlayerManager.findFirstMaintenanceAllowedPlayer(server);
+                if (whitelistedPlayer != null && whitelistedPlayer.isActive()) {
+                    reconnectHandler.reconnectPlayer(whitelistedPlayer);
                 }
+                continue;
+            }
+
+            Player nextPlayer = playerManager.getNextQueuedPlayer(server);
+            if (nextPlayer != null) {
+                reconnectHandler.reconnectPlayer(nextPlayer);
             }
         }
+        serverCursor = (startIndex + batchSize) % serverCount;
+    }
+
+    private void processQueueDisabled(Collection<Player> connectedPlayers) {
+        Map<String, Boolean> maintenanceCache = new HashMap<>();
+        for (Player player : connectedPlayers) {
+            if (playerManager.hasConnectionIssue(player) || playerManager.isPlayerHeld(player.getUniqueId())
+                    || !player.isActive()) {
+                continue;
+            }
+
+            RegisteredServer previousServer = playerManager.getPreviousServer(player);
+            if (previousServer == null || playerManager.isServerHeld(previousServer.getServerInfo().getName())) {
+                continue;
+            }
+
+            if (isServerInMaintenance(previousServer, maintenanceCache)
+                    && !canBypassMaintenance(player, previousServer)) {
+                continue;
+            }
+
+            if (reconnectHandler.reconnectPlayer(player)) {
+                break;
+            }
+        }
+    }
+
+    private boolean canBypassMaintenance(Player player, RegisteredServer server) {
+        String serverName = server.getServerInfo().getName();
+        return player.hasPermission("maintenance.admin")
+                || player.hasPermission("maintenance.bypass")
+                || player.hasPermission("maintenance.singleserver.bypass." + serverName)
+                || Utility.playerMaintenanceWhitelisted(player);
     }
 
     private boolean isServerInMaintenance(RegisteredServer server, Map<String, Boolean> maintenanceCache) {

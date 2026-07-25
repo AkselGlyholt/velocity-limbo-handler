@@ -18,44 +18,30 @@ public class MessageFormatter {
     }
 
     public static String formatMessage(String msg, Player player, Integer knownPosition, RegisteredServer knownServer) {
-        RegisteredServer server = null;
+        boolean hasPlayer = msg.contains("[player]");
+        boolean hasQueuePosition = msg.contains("[queue-position]");
+        boolean hasQueueSize = msg.contains("[queue-size]");
+        boolean hasTotalLimbo = msg.contains("[total-limbo]");
+        boolean hasQueuedServer = msg.contains("[queued-server]");
+        PlaceholderValues values = resolvePlaceholderValues(
+                player, knownPosition, knownServer,
+                hasPlayer, hasQueuePosition, hasQueueSize, hasTotalLimbo, hasQueuedServer
+        );
 
-        if (msg.contains("[player]")) {
-            msg = msg.replace("[player]", player.getUsername());
+        if (hasPlayer) {
+            msg = msg.replace("[player]", values.player());
         }
-
-        if (msg.contains("[queue-position]")) {
-            int position = knownPosition != null
-                    ? knownPosition
-                    : VelocityLimboHandler.getPlayerManager().getQueuePosition(player);
-            msg = msg.replace("[queue-position]", Integer.toString(position));
+        if (hasQueuePosition) {
+            msg = msg.replace("[queue-position]", Integer.toString(values.queuePosition()));
         }
-
-        if (msg.contains("[queue-size]")) {
-            if (knownServer != null) {
-                server = knownServer;
-            } else if (server == null) {
-                server = VelocityLimboHandler.getPlayerManager().getPreviousServer(player);
-            }
-
-            int size = VelocityLimboHandler.getPlayerManager().getQueueSize(server.getServerInfo().getName());
-            msg = msg.replace("[queue-size]", Integer.toString(size));
+        if (hasQueueSize) {
+            msg = msg.replace("[queue-size]", Integer.toString(values.queueSize()));
         }
-
-        if (msg.contains("[total-limbo]")) {
-            int size = VelocityLimboHandler.getLimboServer().getPlayersConnected().size();
-            msg = msg.replace("[total-limbo]", Integer.toString(size));
+        if (hasTotalLimbo) {
+            msg = msg.replace("[total-limbo]", Integer.toString(values.totalLimbo()));
         }
-
-        if (msg.contains("[queued-server]")) {
-            if (knownServer != null) {
-                server = knownServer;
-            } else if (server == null) {
-                server = VelocityLimboHandler.getPlayerManager().getPreviousServer(player);
-            }
-
-            String serverName = server.getServerInfo().getName();
-            msg = msg.replace("[queued-server]", serverName);
+        if (hasQueuedServer) {
+            msg = msg.replace("[queued-server]", values.queuedServer());
         }
 
         return msg;
@@ -73,6 +59,32 @@ public class MessageFormatter {
 
     public static void clearCache() {
         COMPILED_MESSAGES.clear();
+    }
+
+    private static PlaceholderValues resolvePlaceholderValues(
+            Player player, Integer knownPosition, RegisteredServer knownServer,
+            boolean hasPlayer, boolean hasQueuePosition, boolean hasQueueSize,
+            boolean hasTotalLimbo, boolean hasQueuedServer
+    ) {
+        String playerName = hasPlayer ? player.getUsername() : null;
+        Integer queuePosition = hasQueuePosition
+                ? knownPosition != null ? knownPosition : VelocityLimboHandler.getPlayerManager().getQueuePosition(player)
+                : null;
+
+        RegisteredServer server = knownServer;
+        if ((hasQueueSize || hasQueuedServer) && server == null) {
+            server = VelocityLimboHandler.getPlayerManager().getPreviousServer(player);
+        }
+        String serverName = hasQueueSize || hasQueuedServer ? server.getServerInfo().getName() : null;
+        Integer queueSize = hasQueueSize
+                ? VelocityLimboHandler.getPlayerManager().getQueueSize(serverName)
+                : null;
+        Integer totalLimbo = hasTotalLimbo
+                ? VelocityLimboHandler.getLimboServer().getPlayersConnected().size()
+                : null;
+
+        return new PlaceholderValues(playerName, queuePosition, queueSize, totalLimbo,
+                hasQueuedServer ? serverName : null);
     }
 
     private static final class CompiledMessage {
@@ -94,33 +106,25 @@ public class MessageFormatter {
 
         private Component render(Player player, Integer knownPosition, RegisteredServer knownServer) {
             Component result = template;
-            RegisteredServer server = knownServer;
+            PlaceholderValues values = resolvePlaceholderValues(
+                    player, knownPosition, knownServer,
+                    hasPlayer, hasQueuePosition, hasQueueSize, hasTotalLimbo, hasQueuedServer
+            );
 
             if (hasPlayer) {
-                result = replaceLiteral(result, "[player]", Component.text(player.getUsername()));
+                result = replaceLiteral(result, "[player]", Component.text(values.player()));
             }
             if (hasQueuePosition) {
-                int position = knownPosition != null
-                        ? knownPosition
-                        : VelocityLimboHandler.getPlayerManager().getQueuePosition(player);
-                result = replaceLiteral(result, "[queue-position]", Component.text(position));
+                result = replaceLiteral(result, "[queue-position]", Component.text(values.queuePosition()));
             }
             if (hasQueueSize) {
-                if (server == null) {
-                    server = VelocityLimboHandler.getPlayerManager().getPreviousServer(player);
-                }
-                int size = VelocityLimboHandler.getPlayerManager().getQueueSize(server.getServerInfo().getName());
-                result = replaceLiteral(result, "[queue-size]", Component.text(size));
+                result = replaceLiteral(result, "[queue-size]", Component.text(values.queueSize()));
             }
             if (hasTotalLimbo) {
-                int size = VelocityLimboHandler.getLimboServer().getPlayersConnected().size();
-                result = replaceLiteral(result, "[total-limbo]", Component.text(size));
+                result = replaceLiteral(result, "[total-limbo]", Component.text(values.totalLimbo()));
             }
             if (hasQueuedServer) {
-                if (server == null) {
-                    server = VelocityLimboHandler.getPlayerManager().getPreviousServer(player);
-                }
-                result = replaceLiteral(result, "[queued-server]", Component.text(server.getServerInfo().getName()));
+                result = replaceLiteral(result, "[queued-server]", Component.text(values.queuedServer()));
             }
 
             return result;
@@ -129,5 +133,9 @@ public class MessageFormatter {
         private Component replaceLiteral(Component source, String literal, Component replacement) {
             return source.replaceText(builder -> builder.matchLiteral(literal).replacement(replacement));
         }
+    }
+
+    private record PlaceholderValues(String player, Integer queuePosition, Integer queueSize,
+                                     Integer totalLimbo, String queuedServer) {
     }
 }

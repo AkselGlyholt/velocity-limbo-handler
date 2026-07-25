@@ -49,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
@@ -129,6 +130,20 @@ class VelocityLimboApiImplTest {
         assertEquals(RetargetResult.NOT_READY, controller.retargetPlayer(playerId, "survival"));
         assertEquals(EnterResult.NOT_READY,
                 controller.enterLimbo(player, EnterRequest.destination("survival")).toCompletableFuture().join());
+    }
+
+    @Test
+    void controllerRejectsNullServerNamesRegardlessOfAvailability() {
+        LimboController controller = controller(new Object(), "example");
+        HoldRequest request = new HoldRequest("deploy");
+
+        assertThrows(NullPointerException.class, () -> controller.holdServer(null, request));
+        assertThrows(NullPointerException.class, () -> controller.retargetPlayer(playerId, null));
+
+        api.shutdown();
+
+        assertThrows(NullPointerException.class, () -> controller.holdServer(null, request));
+        assertThrows(NullPointerException.class, () -> controller.retargetPlayer(playerId, null));
     }
 
     @Test
@@ -442,6 +457,20 @@ class VelocityLimboApiImplTest {
         controller.releaseHold(pluginHold.lease().orElseThrow().id());
         assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
         verify(playerManager).admitPlayer(player, destination);
+    }
+
+    @Test
+    void failedAuthenticationHoldReacquisitionIsLogged() {
+        managePlayer();
+        when(player.isActive()).thenReturn(true, false);
+        Logger logger = mock(Logger.class);
+
+        try (MockedStatic<VelocityLimboHandler> plugin = mockStatic(VelocityLimboHandler.class)) {
+            plugin.when(VelocityLimboHandler::getLogger).thenReturn(logger);
+            api.setAuthenticationBlocked(playerId, true, "authentication");
+        }
+
+        verify(logger).warning(contains("INACTIVE_OR_UNMANAGED_PLAYER"));
     }
 
     @Test

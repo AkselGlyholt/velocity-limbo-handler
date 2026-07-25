@@ -196,13 +196,6 @@ class AdvancedPlayerStateTest {
         playerManager.removePlayerIssue(first);
         playerManager.removePlayerIssue(second);
         
-        // Use real playerManager methods instead of stubbing them if possible, or use spies.
-        // Since playerManager is a real object, we should ideally NOT stub it.
-        // But the previous sub-agent tried to stub it.
-        
-        // Let's just fix the stubbing style to avoid the getUniqueId() call on the mock during stubbing.
-        // Actually, PlayerManager is a simple state holder. Let's just set the state.
-        
         playerManager.addPlayer(first, previousServer);
         playerManager.addPlayer(second, previousServer);
 

@@ -99,6 +99,13 @@ public class NLoginHandler implements AuthHandler {
             return;
         }
 
+        // ConnectionListener owns reroutes for held players and queued or held destinations.
+        if (playerManager.isPlayerHeld(player.getUniqueId())
+                || playerManager.isServerHeld(intendedServer.getServerInfo().getName())
+                || playerManager.hasQueuedPlayers(intendedServer)) {
+            return;
+        }
+
         // Cancel NLogin's auto-redirect - queue will handle the connection
         if (!blocker.isBlocked(player.getUniqueId())) {
             event.setResult(ServerPreConnectEvent.ServerResult.denied());

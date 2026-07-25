@@ -162,6 +162,19 @@ class ReconnectHandlerTest {
     }
 
     @Test
+    void holdAcquiredDuringProbePreventsConnection() {
+        CompletableFuture<BackendHealthTracker.Availability> probe = new CompletableFuture<>();
+        when(healthTracker.probe(server)).thenReturn(probe);
+
+        assertTrue(reconnectHandler.reconnectPlayer(player));
+        when(playerManager.isServerHeld("survival")).thenReturn(true);
+        probe.complete(new BackendHealthTracker.Availability(true, false, 5));
+
+        verify(player, never()).createConnectionRequest(server);
+        verify(playerManager).setPlayerConnecting(player, false);
+    }
+
+    @Test
     void maintenanceEnabledDuringProbeAllowsBypassConnection() {
         CompletableFuture<BackendHealthTracker.Availability> probe = new CompletableFuture<>();
         CompletableFuture<ConnectionRequestBuilder.Result> connection = new CompletableFuture<>();

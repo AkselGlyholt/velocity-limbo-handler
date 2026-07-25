@@ -9,6 +9,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import java.lang.reflect.Method;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 public class LibreLoginNextHandler implements AuthHandler {
@@ -77,34 +78,7 @@ public class LibreLoginNextHandler implements AuthHandler {
             Class<?> eventTypeClass = Class.forName("xyz.miguvt.libreloginnext.api.event.EventType");
             Method subscribe = eventProvider.getClass().getMethod("subscribe", eventTypeClass, java.util.function.Consumer.class);
 
-            java.util.function.Consumer<Object> handler = (Object event) -> {
-                try {
-                    Player p = extractPlayerFromLibreEvent(event);
-                    if (p != null) {
-                        Utility.logDebug(() -> "Player " + p.getUsername() + " authenticated via LibreLoginNext — unblocked.");
-                        blocker.unblock(p.getUniqueId());
-
-                        RegisteredServer server = playerManager.getPreviousServer(p);
-                        playerManager.addPlayer(p, server);
-                    } else {
-                        // Fallback: try UUID path
-                        Method getUser = safeMethod(event.getClass(), "getUser");
-                        if (getUser != null) {
-                            Object user = getUser.invoke(event);
-                            if (user != null) {
-                                Method getUuid = safeMethod(user.getClass(), "getUuid");
-                                if (getUuid != null) {
-                                    Object uuid = getUuid.invoke(user);
-                                    blocker.unblock((java.util.UUID) uuid);
-                                    // logger.info("Authenticated (UUID only) — unblocked.");
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception ex) {
-                    logger.warning("Failed to process LibreLoginNext auth event: " + ex.getMessage());
-                }
-            };
+            java.util.function.Consumer<Object> handler = this::handleAuthenticationEvent;
 
             subscribe.invoke(eventProvider, authType, handler);
 
@@ -114,6 +88,55 @@ public class LibreLoginNextHandler implements AuthHandler {
             logger.warning("Failed to integrate with LibreLoginNext: " + e.getMessage());
             return false;
         }
+    }
+
+    void handleAuthenticationEvent(Object event) {
+        try {
+            Player player = extractPlayerFromLibreEvent(event);
+            if (player != null) {
+                unblockAndRegister(player);
+                return;
+            }
+
+            UUID playerId = extractPlayerId(event);
+            if (playerId == null) return;
+
+            blocker.unblock(playerId);
+            proxy.getPlayer(playerId).filter(Player::isActive).ifPresent(this::registerAuthenticatedPlayer);
+        } catch (Exception ex) {
+            logger.warning("Failed to process LibreLoginNext auth event: " + ex.getMessage());
+        }
+    }
+
+    private void unblockAndRegister(Player player) {
+        Utility.logDebug(() -> "Player " + player.getUsername()
+                + " authenticated via LibreLoginNext — unblocked.");
+        blocker.unblock(player.getUniqueId());
+        registerAuthenticatedPlayer(player);
+    }
+
+    private void registerAuthenticatedPlayer(Player player) {
+        RegisteredServer server = playerManager.getPreviousServer(player);
+        if (server == null) {
+            logger.warning("Could not register authenticated LibreLoginNext player "
+                    + player.getUsername() + ": no destination server is available");
+            return;
+        }
+        playerManager.addPlayer(player, server);
+    }
+
+    private UUID extractPlayerId(Object event) throws ReflectiveOperationException {
+        Method getUser = safeMethod(event.getClass(), "getUser");
+        if (getUser == null) return null;
+
+        Object user = getUser.invoke(event);
+        if (user == null) return null;
+
+        Method getUuid = safeMethod(user.getClass(), "getUuid");
+        if (getUuid == null) return null;
+
+        Object value = getUuid.invoke(user);
+        return value instanceof UUID playerId ? playerId : null;
     }
 
     private static Method safeMethod(Class<?> c, String name, Class<?>... params) {

@@ -31,6 +31,7 @@ class UtilityTest {
 
     @BeforeEach
     void setUp() {
+        Utility.clearMaintenanceAdapter();
         mockedVelocityLimboHandler = mockStatic(VelocityLimboHandler.class);
         proxyServer = mock(ProxyServer.class);
         logger = mock(Logger.class);
@@ -45,6 +46,7 @@ class UtilityTest {
 
     @AfterEach
     void tearDown() {
+        Utility.clearMaintenanceAdapter();
         mockedVelocityLimboHandler.close();
     }
 
@@ -104,6 +106,37 @@ class UtilityTest {
             assertTrue(message.contains("connection issues"));
         } finally {
             Locale.setDefault(originalLocale);
+        }
+    }
+
+    @Test
+    void maintenanceAndWhitelistFailuresAreLoggedIndependently() {
+        FailingMaintenanceApi maintenanceApi = new FailingMaintenanceApi();
+        mockedVelocityLimboHandler.when(VelocityLimboHandler::hasMaintenancePlugin).thenReturn(true);
+        mockedVelocityLimboHandler.when(VelocityLimboHandler::getMaintenanceAPI).thenReturn(maintenanceApi);
+        Utility.clearMaintenanceAdapter();
+
+        assertFalse(Utility.isServerInMaintenance("survival"));
+        assertFalse(Utility.isServerInMaintenance("survival"));
+        assertFalse(Utility.playerMaintenanceWhitelisted(mock(Player.class)));
+
+        verify(logger, times(1)).warning(contains("maintenance API"));
+        verify(logger, times(1)).warning(contains("maintenance whitelist API"));
+    }
+
+    public static final class FailingMaintenanceApi {
+        public boolean isMaintenance(String serverName) {
+            throw new IllegalStateException("maintenance failed");
+        }
+
+        public FailingMaintenanceSettings getSettings() {
+            return new FailingMaintenanceSettings();
+        }
+    }
+
+    public static final class FailingMaintenanceSettings {
+        public java.util.Map<java.util.UUID, String> getWhitelistedPlayers() {
+            throw new IllegalStateException("whitelist failed");
         }
     }
 }
