@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 public class QueueNotifierTask implements Runnable {
     private final ProxyServer proxyServer;
-    private final RegisteredServer limboServer;
+    private final String limboServerName;
     private final PlayerManager playerManager;
     private final ConfigManager configManager;
     private final VelocityLimboApiImpl api;
@@ -28,8 +28,13 @@ public class QueueNotifierTask implements Runnable {
 
     public QueueNotifierTask(ProxyServer proxyServer, RegisteredServer limboServer, PlayerManager playerManager,
                              ConfigManager configManager, VelocityLimboApiImpl api) {
+        this(proxyServer, limboServer.getServerInfo().getName(), playerManager, configManager, api);
+    }
+
+    public QueueNotifierTask(ProxyServer proxyServer, String limboServerName, PlayerManager playerManager,
+                             ConfigManager configManager, VelocityLimboApiImpl api) {
         this.proxyServer = proxyServer;
-        this.limboServer = limboServer;
+        this.limboServerName = limboServerName;
         this.playerManager = playerManager;
         this.configManager = configManager;
         this.api = api;
@@ -60,6 +65,11 @@ public class QueueNotifierTask implements Runnable {
     }
 
     private void startNotificationCycle(long now) {
+        RegisteredServer limboServer = proxyServer.getServer(limboServerName).orElse(null);
+        if (limboServer == null) {
+            nextCycleAtNanos = now + TimeUnit.SECONDS.toNanos(1);
+            return;
+        }
         for (Player player : limboServer.getPlayersConnected()) {
             pendingPlayers.addLast(player.getUniqueId());
         }
@@ -72,7 +82,8 @@ public class QueueNotifierTask implements Runnable {
 
     private boolean isInLimbo(Player player) {
         return player.getCurrentServer()
-                .map(connection -> Utility.doServerNamesMatch(connection.getServer(), limboServer))
+                .map(connection -> connection.getServer().getServerInfo().getName()
+                        .equalsIgnoreCase(limboServerName))
                 .orElse(false);
     }
 
@@ -91,11 +102,11 @@ public class QueueNotifierTask implements Runnable {
             return;
         }
 
-        RegisteredServer previousServer = playerManager.getPreviousServer(player);
-        if (previousServer == null) {
+        String serverName = playerManager.getPreviousServerName(player);
+        if (serverName == null) {
             return;
         }
-        String serverName = previousServer.getServerInfo().getName();
+        RegisteredServer previousServer = proxyServer.getServer(serverName).orElse(null);
 
         if (maintenanceCache.computeIfAbsent(serverName, Utility::isServerInMaintenance)) {
             player.sendMessage(MessageFormatter.formatComponent(

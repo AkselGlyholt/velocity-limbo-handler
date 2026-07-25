@@ -6,6 +6,7 @@ import com.akselglyholt.velocitylimbohandler.api.LimboController;
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest;
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterResult;
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus;
+import com.akselglyholt.velocitylimbohandler.api.events.PlayerEnteredLimboEvent;
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerLeftLimboEvent;
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectAttemptEvent;
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectResultEvent;
@@ -32,15 +33,19 @@ import com.velocitypowered.api.scheduler.Scheduler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.MockedStatic;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,9 +56,9 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
-import org.mockito.MockedStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -66,6 +71,8 @@ class VelocityLimboApiImplTest {
     private EventManager eventManager;
     private PlayerManager playerManager;
     private VelocityLimboApiImpl api;
+    private Clock clock;
+    private Instant currentTime;
     private RegisteredServer destination;
     private Player player;
     private UUID playerId;
@@ -76,7 +83,10 @@ class VelocityLimboApiImplTest {
         pluginManager = mock(PluginManager.class);
         eventManager = mock(EventManager.class);
         playerManager = mock(PlayerManager.class);
-        api = new VelocityLimboApiImpl(proxy, mock(VelocityLimboHandler.class), playerManager);
+        clock = mock(Clock.class);
+        currentTime = Instant.parse("2026-01-01T00:00:00Z");
+        when(clock.instant()).thenAnswer(ignored -> currentTime);
+        api = new VelocityLimboApiImpl(proxy, mock(VelocityLimboHandler.class), playerManager, clock);
         destination = server("survival");
         player = mock(Player.class);
         playerId = UUID.randomUUID();
@@ -156,15 +166,16 @@ class VelocityLimboApiImplTest {
     }
 
     @Test
-    void serverHoldRejectsBlankUnknownAndLimboTargets() {
+    void serverHoldAcceptsUnavailableTargetsButRejectsBlankAndLimboTargets() {
         LimboController controller = controller(new Object(), "example");
         RegisteredServer limbo = server("limbo");
         when(proxy.getServer("limbo")).thenReturn(Optional.of(limbo));
 
         assertEquals(HoldStatus.INVALID_TARGET,
                 controller.holdServer("  ", new HoldRequest("deploy")).status());
-        assertEquals(HoldStatus.UNKNOWN_SERVER,
+        assertEquals(HoldStatus.ACQUIRED,
                 controller.holdServer("missing", new HoldRequest("deploy")).status());
+        assertTrue(api.isServerHeld("missing"));
         try (MockedStatic<VelocityLimboHandler> plugin = mockStatic(VelocityLimboHandler.class)) {
             plugin.when(VelocityLimboHandler::getLimboServer).thenReturn(limbo);
             assertEquals(HoldStatus.INVALID_TARGET,
@@ -248,7 +259,7 @@ class VelocityLimboApiImplTest {
         api.onPlayerArrived(player, destination).toCompletableFuture().join();
         assertEquals(LimboPhase.HELD, api.player(playerId).orElseThrow().phase());
         assertEquals(1, api.player(playerId).orElseThrow().playerHolds().size());
-        verify(playerManager, never()).admitPlayer(player, destination);
+        verify(playerManager, never()).admitPlayerByName(player, "survival");
 
         assertEquals(HoldReleaseResult.RELEASED,
                 controller.releaseHold(outcome.initialHold().orElseThrow().id()));
@@ -298,7 +309,7 @@ class VelocityLimboApiImplTest {
         assertEquals(HoldReleaseResult.RELEASED,
                 second.releaseHold(secondHold.lease().orElseThrow().id()));
         assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
-        verify(playerManager).admitPlayer(player, destination);
+        verify(playerManager).admitPlayerByName(player, "survival");
     }
 
     @Test
@@ -342,6 +353,24 @@ class VelocityLimboApiImplTest {
     }
 
     @Test
+    void releaseAllCountsOnlyLeasesReleasedByThatCall() {
+        LimboController controller = controller(new Object(), "example");
+        controller.holdServer("survival", new HoldRequest("first"));
+        UUID secondLease = controller.holdServer("survival", new HoldRequest("second"))
+                .lease().orElseThrow().id();
+        AtomicBoolean releasedConcurrently = new AtomicBoolean();
+        doAnswer(ignored -> {
+            if (releasedConcurrently.compareAndSet(false, true)) {
+                controller.releaseHold(secondLease);
+            }
+            return null;
+        }).when(eventManager).fireAndForget(isA(ServerHoldChangedEvent.class));
+
+        assertEquals(1, controller.releaseAllHolds());
+        assertEquals(0, api.heldServerCount());
+    }
+
+    @Test
     void queueSnapshotsUseStoredTiersWithoutReevaluatingPermissions() {
         managePlayer();
         when(playerManager.getQueueForServer("survival"))
@@ -362,17 +391,17 @@ class VelocityLimboApiImplTest {
         when(eventManager.fire(any())).thenAnswer(invocation -> barrier.thenApply(ignored -> invocation.getArgument(0)));
 
         var arrival = api.onPlayerArrived(player, destination);
-        verify(playerManager, never()).admitPlayer(player, destination);
+        verify(playerManager, never()).admitPlayerByName(player, "survival");
 
         var hold = controller.holdPlayer(playerId, new HoldRequest("loading profile"));
         barrier.complete(new Object());
         arrival.toCompletableFuture().join();
 
         assertEquals(LimboPhase.HELD, api.player(playerId).orElseThrow().phase());
-        verify(playerManager, never()).admitPlayer(player, destination);
+        verify(playerManager, never()).admitPlayerByName(player, "survival");
 
         controller.releaseHold(hold.lease().orElseThrow().id());
-        verify(playerManager).admitPlayer(player, destination);
+        verify(playerManager).admitPlayerByName(player, "survival");
     }
 
     @Test
@@ -384,13 +413,13 @@ class VelocityLimboApiImplTest {
         reset(playerManager);
 
         assertEquals(RetargetResult.SUCCESS, controller.retargetPlayer(playerId, "factions"));
-        verify(playerManager).retargetPlayer(player, factions, true);
+        verify(playerManager).retargetPlayerByName(player, "factions", true);
         assertEquals("factions", api.player(playerId).orElseThrow().destination());
 
         controller.holdPlayer(playerId, new HoldRequest("pause"));
         reset(playerManager);
         assertEquals(RetargetResult.SUCCESS, controller.retargetPlayer(playerId, "survival"));
-        verify(playerManager).retargetPlayer(player, destination, false);
+        verify(playerManager).retargetPlayerByName(player, "survival", false);
     }
 
     @Test
@@ -449,16 +478,18 @@ class VelocityLimboApiImplTest {
     }
 
     @Test
-    void expiredFinalHoldReturnsPlayerToWaiting() throws InterruptedException {
+    void expiredFinalHoldReturnsPlayerToWaiting() {
         LimboController controller = controller(new Object(), "example");
         managePlayer();
         reset(playerManager);
 
-        controller.holdPlayer(playerId, new HoldRequest("brief pause", Duration.ofMillis(1)));
-        Thread.sleep(5);
+        Duration duration = Duration.ofMinutes(1);
+        controller.holdPlayer(playerId, new HoldRequest("brief pause", duration));
+        currentTime = currentTime.plus(duration);
+        api.expireDueLeases();
 
         assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
-        verify(playerManager).admitPlayer(player, destination);
+        verify(playerManager).admitPlayerByName(player, "survival");
     }
 
     @Test
@@ -475,11 +506,11 @@ class VelocityLimboApiImplTest {
         assertEquals(LimboPhase.HELD, held.phase());
         assertEquals(1, held.playerHolds().size());
         assertEquals("example", held.playerHolds().getFirst().ownerId());
-        verify(playerManager, never()).admitPlayer(player, destination);
+        verify(playerManager, never()).admitPlayerByName(player, "survival");
 
         controller.releaseHold(pluginHold.lease().orElseThrow().id());
         assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
-        verify(playerManager).admitPlayer(player, destination);
+        verify(playerManager).admitPlayerByName(player, "survival");
     }
 
     @Test
@@ -738,12 +769,59 @@ class VelocityLimboApiImplTest {
         }
 
         assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
-        verify(playerManager).admitPlayer(player, destination);
+        verify(playerManager).admitPlayerByName(player, "survival");
+    }
+
+    @Test
+    void arrivalKeepsTheIntendedDestinationWhenItTemporarilyDisappears() {
+        RegisteredServer fallback = server("lobby");
+        when(proxy.getServer("lobby")).thenReturn(Optional.of(fallback));
+        api.recordRerouteIntent(player, destination);
+        when(proxy.getServer("survival")).thenReturn(Optional.empty());
+
+        api.onPlayerArrived(player, fallback).toCompletableFuture().join();
+
+        assertEquals("survival", api.player(playerId).orElseThrow().destination());
+        assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
+        verify(playerManager).registerPlayerInLimboByName(player, "survival");
+        verify(playerManager).admitPlayerByName(player, "survival");
+        verify(playerManager, never()).addPlayerWithIssue(any(), any());
+    }
+
+    @Test
+    void destinationDisappearanceDuringAdmissionLeavesPlayerWaiting() {
+        CompletableFuture<PlayerEnteredLimboEvent> enteredBarrier = new CompletableFuture<>();
+        when(eventManager.fire(any())).thenAnswer(ignored -> enteredBarrier);
+        CompletionStage<Void> admission = api.onPlayerArrived(player, destination);
+        when(proxy.getServer("survival")).thenReturn(Optional.empty());
+
+        enteredBarrier.complete(mock(PlayerEnteredLimboEvent.class));
+        admission.toCompletableFuture().join();
+
+        assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
+        verify(playerManager).admitPlayerByName(player, "survival");
+        verify(playerManager, never()).addPlayerWithIssue(any(), any());
+    }
+
+    @Test
+    void destinationDisappearanceWhileHeldReturnsPlayerToWaitingOnRelease() {
+        LimboController controller = controller(new Object(), "example");
+        managePlayer();
+        var hold = controller.holdPlayer(playerId, new HoldRequest("pause"));
+        reset(playerManager);
+        when(proxy.getServer("survival")).thenReturn(Optional.empty());
+
+        controller.releaseHold(hold.lease().orElseThrow().id());
+
+        assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
+        verify(playerManager).admitPlayerByName(player, "survival");
+        verify(playerManager, never()).addPlayerWithIssue(any(), any());
     }
 
     @Test
     void connectionIssueTransitionsRemainVisibleInPlayerSnapshots() {
         managePlayer();
+        reset(playerManager);
         when(playerManager.getConnectionIssue(playerId)).thenReturn("maintenance");
 
         api.setConnectionIssue(player, "maintenance");
@@ -752,6 +830,7 @@ class VelocityLimboApiImplTest {
 
         api.setConnectionIssue(player, null);
         assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
+        verify(playerManager).admitPlayerByName(player, "survival");
     }
 
     @Test
@@ -762,7 +841,7 @@ class VelocityLimboApiImplTest {
         api.onPlayerArrived(player, previous).toCompletableFuture().join();
 
         assertEquals("survival", api.player(playerId).orElseThrow().destination());
-        verify(playerManager).registerPlayerInLimbo(player, destination);
+        verify(playerManager).registerPlayerInLimboByName(player, "survival");
     }
 
     @Test

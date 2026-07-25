@@ -91,6 +91,27 @@ class PlayerManagerTest {
     }
 
     @Test
+    void unavailableRegisteredDestinationDoesNotFallBackToDirectConnect() {
+        Player player = mock(Player.class);
+        RegisteredServer server = mock(RegisteredServer.class);
+        ServerInfo info = mock(ServerInfo.class);
+        UUID playerId = UUID.randomUUID();
+
+        when(player.getUniqueId()).thenReturn(playerId);
+        when(player.isActive()).thenReturn(true);
+        when(proxyServer.getPlayer(playerId)).thenReturn(Optional.of(player));
+        when(server.getServerInfo()).thenReturn(info);
+        when(info.getName()).thenReturn("survival");
+
+        playerManager.addPlayer(player, server);
+        when(proxyServer.getServer("survival")).thenReturn(Optional.empty());
+
+        assertNull(playerManager.getPreviousServer(player));
+        assertEquals("survival", playerManager.getPreviousServerName(player));
+        assertEquals(1, playerManager.getQueuePosition(player));
+    }
+
+    @Test
     void testRemovePlayer() {
         Player player = mock(Player.class);
         RegisteredServer server = mock(RegisteredServer.class);

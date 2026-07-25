@@ -291,6 +291,103 @@ class AdvancedPlayerStateTest {
         mockedUtility.verify(() -> Utility.isServerInMaintenance("creative"), never());
     }
 
+    @Test
+    void reconnectionTask_keepsQueuedPlayerUntilDestinationReappears() {
+        ConfigManager configManager = mock(ConfigManager.class);
+        RegisteredServer limboServer = mockServer("limbo");
+        RegisteredServer destination = mockServer("survival");
+        ReconnectHandler reconnectHandler = mock(ReconnectHandler.class);
+        Player queuedPlayer = mockPlayer(UUID.randomUUID(), true);
+
+        when(configManager.isQueueEnabled()).thenReturn(true);
+        when(configManager.getReconnectBatchSize()).thenReturn(8);
+        when(limboServer.getPlayersConnected()).thenReturn(List.of(queuedPlayer));
+        playerManager.addPlayer(queuedPlayer, destination);
+
+        ReconnectionTask task = new ReconnectionTask(
+                proxyServer,
+                limboServer,
+                playerManager,
+                authManager,
+                configManager,
+                reconnectHandler,
+                mock(VelocityLimboApiImpl.class)
+        );
+
+        when(proxyServer.getServer("survival")).thenReturn(Optional.empty());
+        task.run();
+        verify(reconnectHandler, never()).reconnectPlayer(queuedPlayer);
+        assertEquals(1, playerManager.getQueueSize("survival"));
+
+        when(proxyServer.getServer("survival")).thenReturn(Optional.of(destination));
+        task.run();
+        verify(reconnectHandler).reconnectPlayer(queuedPlayer);
+        assertEquals(1, playerManager.getQueueSize("survival"));
+    }
+
+    @Test
+    void queueDisabledReconnectionWaitsForRecordedDestinationToReappear() {
+        ConfigManager configManager = mock(ConfigManager.class);
+        RegisteredServer limboServer = mockServer("limbo");
+        RegisteredServer destination = mockServer("survival");
+        ReconnectHandler reconnectHandler = mock(ReconnectHandler.class);
+        Player player = mockPlayer(UUID.randomUUID(), true);
+
+        when(configManager.isQueueEnabled()).thenReturn(false);
+        when(limboServer.getPlayersConnected()).thenReturn(List.of(player));
+        playerManager.addPlayer(player, destination);
+
+        ReconnectionTask task = new ReconnectionTask(
+                proxyServer,
+                limboServer,
+                playerManager,
+                authManager,
+                configManager,
+                reconnectHandler,
+                mock(VelocityLimboApiImpl.class)
+        );
+
+        when(proxyServer.getServer("survival")).thenReturn(Optional.empty());
+        task.run();
+        verify(reconnectHandler, never()).reconnectPlayer(player);
+
+        when(proxyServer.getServer("survival")).thenReturn(Optional.of(destination));
+        when(reconnectHandler.reconnectPlayer(player)).thenReturn(true);
+        task.run();
+        verify(reconnectHandler).reconnectPlayer(player);
+    }
+
+    @Test
+    void reconnectionTaskUsesCurrentLimboServerIncarnation() {
+        ConfigManager configManager = mock(ConfigManager.class);
+        RegisteredServer originalLimbo = mockServer("limbo");
+        RegisteredServer destination = mockServer("survival");
+        ReconnectHandler reconnectHandler = mock(ReconnectHandler.class);
+        Player queuedPlayer = mockPlayer(UUID.randomUUID(), true);
+        RegisteredServer replacementLimbo = mockServer("limbo");
+
+        when(configManager.isQueueEnabled()).thenReturn(true);
+        when(configManager.getReconnectBatchSize()).thenReturn(8);
+        when(originalLimbo.getPlayersConnected()).thenReturn(List.of());
+        when(replacementLimbo.getPlayersConnected()).thenReturn(List.of(queuedPlayer));
+        playerManager.addPlayer(queuedPlayer, destination);
+
+        ReconnectionTask task = new ReconnectionTask(
+                proxyServer,
+                originalLimbo,
+                playerManager,
+                authManager,
+                configManager,
+                reconnectHandler,
+                mock(VelocityLimboApiImpl.class)
+        );
+
+        task.run();
+
+        verify(reconnectHandler).reconnectPlayer(queuedPlayer);
+        verify(originalLimbo, never()).getPlayersConnected();
+    }
+
     private RegisteredServer mockServer(String name) {
         RegisteredServer server = mock(RegisteredServer.class);
         ServerInfo info = mock(ServerInfo.class);

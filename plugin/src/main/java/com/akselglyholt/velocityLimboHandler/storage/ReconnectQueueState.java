@@ -34,7 +34,10 @@ final class ReconnectQueueState {
     }
 
     void enqueue(Player player, RegisteredServer server) {
-        String serverName = server.getServerInfo().getName();
+        enqueue(player, server.getServerInfo().getName());
+    }
+
+    void enqueue(Player player, String serverName) {
         UUID playerId = player.getUniqueId();
 
         queueByPlayer.compute(playerId, (ignored, previousServerName) -> {

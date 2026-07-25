@@ -29,11 +29,13 @@ public class VlhAdminCommand implements SimpleCommand {
 
     private final MiniMessage miniMessage;
     private final VelocityLimboApiImpl api;
+    private final PlayerManager playerManager;
     private final AtomicBoolean reloadInProgress = new AtomicBoolean();
 
-    public VlhAdminCommand(VelocityLimboApiImpl api) {
+    public VlhAdminCommand(VelocityLimboApiImpl api, PlayerManager playerManager) {
         this.miniMessage = MiniMessage.miniMessage();
         this.api = api;
+        this.playerManager = playerManager;
     }
 
     @Override
@@ -127,7 +129,6 @@ public class VlhAdminCommand implements SimpleCommand {
             return;
         }
 
-        PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
         RegisteredServer limboServer = VelocityLimboHandler.getLimboServer();
 
         String limboName = limboServer != null ? "<white>" + limboServer.getServerInfo().getName() + "</white>" : "<red>Not configured</red>";
@@ -174,7 +175,6 @@ public class VlhAdminCommand implements SimpleCommand {
     }
 
     private void showQueueOverview(CommandSource source, int requestedPage) {
-        PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
         List<Map.Entry<String, Integer>> serverQueues = playerManager.getQueuedServerCounts().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .toList();
@@ -204,7 +204,6 @@ public class VlhAdminCommand implements SimpleCommand {
     }
 
     private void showServerQueue(CommandSource source, String serverName, int requestedPage) {
-        PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
         List<PlayerManager.QueuedPlayer> queue = playerManager.getQueueForServer(serverName);
 
         if (queue.isEmpty()) {

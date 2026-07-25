@@ -21,11 +21,13 @@ public class NLoginHandler implements AuthHandler {
     private final boolean active;
     private final VelocityLimboApiImpl api;
     private final Logger logger = VelocityLimboHandler.getLogger();
-    private final PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
+    private final PlayerManager playerManager;
 
-    public NLoginHandler(ProxyServer proxy, ReconnectBlocker blocker, VelocityLimboApiImpl api) {
+    public NLoginHandler(ProxyServer proxy, ReconnectBlocker blocker,
+                         PlayerManager playerManager, VelocityLimboApiImpl api) {
         this.proxy = proxy;
         this.blocker = blocker;
+        this.playerManager = playerManager;
         this.api = api;
 
         boolean detected = proxy.getPluginManager().getPlugin("nlogin").isPresent()
@@ -88,7 +90,8 @@ public class NLoginHandler implements AuthHandler {
         if (limbo == null) return;
 
         // Return if the server the player is connecting from isn't the Limbo
-        if (player.getCurrentServer().isPresent() && !player.getCurrentServer().get().getServer().equals(limbo)) {
+        if (player.getCurrentServer().isPresent()
+                && !Utility.doServerNamesMatch(player.getCurrentServer().get().getServer(), limbo)) {
             return;
         }
 
@@ -98,7 +101,7 @@ public class NLoginHandler implements AuthHandler {
         }
 
         // Let connections to limbo pass through
-        if (intendedServer.equals(limbo)) {
+        if (Utility.doServerNamesMatch(intendedServer, limbo)) {
             return;
         }
 

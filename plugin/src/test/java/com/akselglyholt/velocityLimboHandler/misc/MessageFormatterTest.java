@@ -46,7 +46,7 @@ class MessageFormatterTest {
 
         when(player.getUsername()).thenReturn("Aksel");
         when(playerManager.getQueuePosition(player)).thenReturn(4);
-        when(playerManager.getPreviousServer(player)).thenReturn(previousServer);
+        when(playerManager.getPreviousServerName(player)).thenReturn("survival");
         when(playerManager.getQueueSize("survival")).thenReturn(3);
         when(previousServer.getServerInfo()).thenReturn(serverInfo);
         when(serverInfo.getName()).thenReturn("survival");
@@ -68,7 +68,7 @@ class MessageFormatterTest {
         assertEquals("Aksel is #4 of 3 for survival with 2 in limbo", result);
         verify(playerManager).getQueuePosition(player);
         verify(playerManager).getQueueSize("survival");
-        verify(playerManager, times(1)).getPreviousServer(player);
+        verify(playerManager, times(1)).getPreviousServerName(player);
     }
 
     @Test
@@ -76,7 +76,7 @@ class MessageFormatterTest {
         String result = MessageFormatter.formatMessage("[queue-size] players waiting for [queued-server]", player);
 
         assertEquals("3 players waiting for survival", result);
-        verify(playerManager, times(1)).getPreviousServer(player);
+        verify(playerManager, times(1)).getPreviousServerName(player);
     }
 
     @Test
@@ -117,7 +117,7 @@ class MessageFormatterTest {
     @Test
     void missingPreviousServerLeavesServerPlaceholdersUnresolved() {
         String message = "[queue-size] players waiting for [queued-server]";
-        when(playerManager.getPreviousServer(player)).thenReturn(null);
+        when(playerManager.getPreviousServerName(player)).thenReturn(null);
 
         assertEquals(message, MessageFormatter.formatMessage(message, player));
         assertEquals(message, PlainTextComponentSerializer.plainText().serialize(

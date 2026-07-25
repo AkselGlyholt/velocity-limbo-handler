@@ -71,18 +71,18 @@ public class MessageFormatter {
                 ? knownPosition != null ? knownPosition : VelocityLimboHandler.getPlayerManager().getQueuePosition(player)
                 : null;
 
-        RegisteredServer server = knownServer;
-        if ((hasQueueSize || hasQueuedServer) && server == null) {
-            server = VelocityLimboHandler.getPlayerManager().getPreviousServer(player);
+        String serverName = null;
+        if (hasQueueSize || hasQueuedServer) {
+            serverName = knownServer != null
+                    ? knownServer.getServerInfo().getName()
+                    : VelocityLimboHandler.getPlayerManager().getPreviousServerName(player);
         }
-        String serverName = (hasQueueSize || hasQueuedServer) && server != null
-                ? server.getServerInfo().getName()
-                : null;
         Integer queueSize = hasQueueSize && serverName != null
                 ? VelocityLimboHandler.getPlayerManager().getQueueSize(serverName)
                 : null;
+        RegisteredServer limboServer = hasTotalLimbo ? VelocityLimboHandler.getLimboServer() : null;
         Integer totalLimbo = hasTotalLimbo
-                ? VelocityLimboHandler.getLimboServer().getPlayersConnected().size()
+                ? limboServer == null ? 0 : limboServer.getPlayersConnected().size()
                 : null;
 
         return new PlaceholderValues(playerName, queuePosition, queueSize, totalLimbo,

@@ -2,6 +2,7 @@ package com.akselglyholt.velocityLimboHandler.listeners;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
+import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.event.Subscribe;
@@ -20,10 +21,13 @@ import java.util.List;
 public class ConnectionListener {
     private final VelocityLimboApiImpl api;
     private final PlayerManager playerManager;
+    private final ReconnectBlocker reconnectBlocker;
 
-    public ConnectionListener(VelocityLimboApiImpl api, PlayerManager playerManager) {
+    public ConnectionListener(VelocityLimboApiImpl api, PlayerManager playerManager,
+                              ReconnectBlocker reconnectBlocker) {
         this.api = api;
         this.playerManager = playerManager;
+        this.reconnectBlocker = reconnectBlocker;
     }
 
     /**
@@ -50,6 +54,7 @@ public class ConnectionListener {
         Player player = event.getPlayer();
         RegisteredServer intendedServer = event.getOriginalServer();
         RegisteredServer limbo = VelocityLimboHandler.getLimboServer();
+        if (limbo == null) return;
 
         // Don't reroute if they are already going to Limbo
         if (Utility.doServerNamesMatch(intendedServer, limbo)) {
@@ -77,7 +82,6 @@ public class ConnectionListener {
     public void onPlayerPostConnect(@NotNull ServerPostConnectEvent event) {
         Player player = event.getPlayer();
 
-        RegisteredServer limbo = VelocityLimboHandler.getLimboServer();
         RegisteredServer currentServer = player.getCurrentServer().map(ServerConnection::getServer).orElse(null);
         RegisteredServer previousServer = event.getPreviousServer();
 
@@ -87,14 +91,14 @@ public class ConnectionListener {
         }
 
         // Remove player from queue if they left Limbo and joined another server
-        if (previousServer != null && Utility.doServerNamesMatch(previousServer, limbo)) {
+        if (previousServer != null && isLimbo(previousServer)) {
             api.onPlayerLeft(player, currentServer);
-            VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
+            reconnectBlocker.unblock(player.getUniqueId());
             return;
         }
 
         // Handle players who just joined Limbo
-        if (Utility.doServerNamesMatch(currentServer, limbo)) {
+        if (isLimbo(currentServer)) {
             // Determine intended server from forced host if available
             String virtualHost = player.getVirtualHost().map(InetSocketAddress::getHostString).orElse(null);
 
@@ -105,7 +109,7 @@ public class ConnectionListener {
 
             // A backend loss has an authoritative recovery target. Forced hosts only determine
             // where a player who joins the proxy without a previous backend should be queued.
-            RegisteredServer intendedTarget = previousServer;
+            String intendedTarget = previousServer == null ? null : previousServer.getServerInfo().getName();
 
             if (intendedTarget == null && virtualHost != null) {
                 List<String> forcedServers = VelocityLimboHandler.getProxyServer()
@@ -118,30 +122,26 @@ public class ConnectionListener {
                         forcedServers != null ? forcedServers.toString() : "no match"));
 
                 if (forcedServers != null && !forcedServers.isEmpty()) {
-                    String targetName = forcedServers.get(0);
-                    intendedTarget = VelocityLimboHandler.getProxyServer()
-                            .getServer(targetName)
-                            .orElse(null);
-
-                    if (intendedTarget == null) {
+                    intendedTarget = forcedServers.get(0);
+                    if (VelocityLimboHandler.getProxyServer().getServer(intendedTarget).isEmpty()) {
                         VelocityLimboHandler.getLogger().warning(String.format(
-                                "Forced-host '%s' for %s maps to unknown server '%s' — check velocity.toml",
-                                virtualHost, player.getUsername(), targetName));
+                                "Forced-host '%s' for %s targets currently unavailable server '%s'; preserving destination",
+                                virtualHost, player.getUsername(), intendedTarget));
                     }
                 }
             }
 
             // Fallback to the direct-connect server when neither a previous server nor forced host exists.
             if (intendedTarget == null) {
-                intendedTarget = VelocityLimboHandler.getDirectConnectServer();
-                RegisteredServer fallbackTarget = intendedTarget;
+                intendedTarget = VelocityLimboHandler.getConfigManager().getDirectConnectServerName();
+                String fallbackTarget = intendedTarget;
                 Utility.logDebug(() -> String.format("%s no forced-host target resolved — falling back to '%s'",
-                        player.getUsername(), fallbackTarget.getServerInfo().getName()));
+                        player.getUsername(), fallbackTarget));
             }
 
-            RegisteredServer queuedTarget = intendedTarget;
+            String queuedTarget = intendedTarget;
             Utility.logDebug(() -> String.format("%s will be queued for '%s'",
-                    player.getUsername(), queuedTarget.getServerInfo().getName()));
+                    player.getUsername(), queuedTarget));
 
             api.onPlayerArrived(player, intendedTarget);
         }
@@ -151,6 +151,11 @@ public class ConnectionListener {
     public void onDisconnect(@NotNull DisconnectEvent event) {
         Player player = event.getPlayer();
         api.onPlayerDisconnected(player);
-        VelocityLimboHandler.getReconnectBlocker().unblock(player.getUniqueId());
+        reconnectBlocker.unblock(player.getUniqueId());
+    }
+
+    private boolean isLimbo(RegisteredServer server) {
+        return server.getServerInfo().getName()
+                .equalsIgnoreCase(VelocityLimboHandler.getConfigManager().getLimboName());
     }
 }
