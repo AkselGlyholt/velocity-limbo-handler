@@ -34,13 +34,13 @@ public class MessageFormatter {
         if (hasQueuePosition) {
             msg = msg.replace("[queue-position]", Integer.toString(values.queuePosition()));
         }
-        if (hasQueueSize) {
+        if (hasQueueSize && values.queueSize() != null) {
             msg = msg.replace("[queue-size]", Integer.toString(values.queueSize()));
         }
         if (hasTotalLimbo) {
             msg = msg.replace("[total-limbo]", Integer.toString(values.totalLimbo()));
         }
-        if (hasQueuedServer) {
+        if (hasQueuedServer && values.queuedServer() != null) {
             msg = msg.replace("[queued-server]", values.queuedServer());
         }
 
@@ -75,8 +75,10 @@ public class MessageFormatter {
         if ((hasQueueSize || hasQueuedServer) && server == null) {
             server = VelocityLimboHandler.getPlayerManager().getPreviousServer(player);
         }
-        String serverName = hasQueueSize || hasQueuedServer ? server.getServerInfo().getName() : null;
-        Integer queueSize = hasQueueSize
+        String serverName = (hasQueueSize || hasQueuedServer) && server != null
+                ? server.getServerInfo().getName()
+                : null;
+        Integer queueSize = hasQueueSize && serverName != null
                 ? VelocityLimboHandler.getPlayerManager().getQueueSize(serverName)
                 : null;
         Integer totalLimbo = hasTotalLimbo
@@ -117,13 +119,13 @@ public class MessageFormatter {
             if (hasQueuePosition) {
                 result = replaceLiteral(result, "[queue-position]", Component.text(values.queuePosition()));
             }
-            if (hasQueueSize) {
+            if (hasQueueSize && values.queueSize() != null) {
                 result = replaceLiteral(result, "[queue-size]", Component.text(values.queueSize()));
             }
             if (hasTotalLimbo) {
                 result = replaceLiteral(result, "[total-limbo]", Component.text(values.totalLimbo()));
             }
-            if (hasQueuedServer) {
+            if (hasQueuedServer && values.queuedServer() != null) {
                 result = replaceLiteral(result, "[queued-server]", Component.text(values.queuedServer()));
             }
 

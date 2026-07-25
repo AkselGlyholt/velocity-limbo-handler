@@ -14,6 +14,7 @@ import org.mockito.MockedStatic;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
@@ -111,5 +112,17 @@ class MessageFormatterTest {
         var component = MessageFormatter.formatComponent(message, player);
 
         assertEquals(formatted, PlainTextComponentSerializer.plainText().serialize(component));
+    }
+
+    @Test
+    void missingPreviousServerLeavesServerPlaceholdersUnresolved() {
+        String message = "[queue-size] players waiting for [queued-server]";
+        when(playerManager.getPreviousServer(player)).thenReturn(null);
+
+        assertEquals(message, MessageFormatter.formatMessage(message, player));
+        assertEquals(message, PlainTextComponentSerializer.plainText().serialize(
+                MessageFormatter.formatComponent(message, player)
+        ));
+        verify(playerManager, never()).getQueueSize(any());
     }
 }
