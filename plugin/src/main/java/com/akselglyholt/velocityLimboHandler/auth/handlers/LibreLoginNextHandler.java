@@ -112,7 +112,9 @@ public class LibreLoginNextHandler implements AuthHandler {
         Utility.logDebug(() -> "Player " + player.getUsername()
                 + " authenticated via LibreLoginNext — unblocked.");
         blocker.unblock(player.getUniqueId());
-        registerAuthenticatedPlayer(player);
+        if (player.isActive()) {
+            registerAuthenticatedPlayer(player);
+        }
     }
 
     private void registerAuthenticatedPlayer(Player player) {

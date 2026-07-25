@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Logger;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -81,6 +82,25 @@ class LibreLoginNextHandlerTest {
         verify(blocker).unblock(playerId);
         verify(playerManager, never()).addPlayer(player, null);
         verify(logger).warning(contains("no destination server is available"));
+    }
+
+    @Test
+    void directExtractionUnblocksButDoesNotRegisterInactivePlayer() {
+        UUID playerId = UUID.randomUUID();
+        Player player = mock(Player.class);
+        when(player.getUniqueId()).thenReturn(playerId);
+
+        handler.handleAuthenticationEvent(new PlayerEvent(player));
+
+        verify(blocker).unblock(playerId);
+        verify(playerManager, never()).getPreviousServer(player);
+        verify(playerManager, never()).addPlayer(any(), any());
+    }
+
+    public record PlayerEvent(Player player) {
+        public Player getPlayer() {
+            return player;
+        }
     }
 
     public record UuidEvent(UuidUser user) {
