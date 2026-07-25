@@ -4,6 +4,7 @@ import com.akselglyholt.velocityLimboHandler.auth.handlers.LibreLoginHandler;
 import com.akselglyholt.velocityLimboHandler.auth.handlers.LibreLoginNextHandler;
 import com.akselglyholt.velocityLimboHandler.auth.handlers.NLoginHandler;
 import com.akselglyholt.velocityLimboHandler.auth.handlers.NoopHandler;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.proxy.Player;
@@ -13,16 +14,16 @@ public final class AuthManager implements AutoCloseable {
     private final ReconnectBlocker blocker;
     private final AuthHandler active;
 
-    public AuthManager(Object plugin, ProxyServer proxy, ReconnectBlocker blocker) {
+    public AuthManager(Object plugin, ProxyServer proxy, ReconnectBlocker blocker, VelocityLimboApiImpl api) {
         this.blocker = blocker;
-        active = selectActive(proxy, blocker);
+        active = selectActive(proxy, blocker, api);
         proxy.getEventManager().register(plugin, PostLoginEvent.class, evt -> {
             Player p = evt.getPlayer();
             active.onPlayerJoin(p);
         });
     }
 
-    private AuthHandler selectActive(ProxyServer proxy, ReconnectBlocker blocker) {
+    private AuthHandler selectActive(ProxyServer proxy, ReconnectBlocker blocker, VelocityLimboApiImpl api) {
         AuthHandler candidate = new LibreLoginHandler(proxy, blocker);
         if (candidate.isActive()) {
             return candidate;
@@ -33,7 +34,7 @@ public final class AuthManager implements AutoCloseable {
             return candidate;
         }
 
-        candidate = new NLoginHandler(proxy, blocker);
+        candidate = new NLoginHandler(proxy, blocker, api);
         if (candidate.isActive()) {
             return candidate;
         }

@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.commands;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.command.CommandSource;
@@ -27,10 +28,12 @@ public class VlhAdminCommand implements SimpleCommand {
     private static final int QUEUE_PAGE_SIZE = 10;
 
     private final MiniMessage miniMessage;
+    private final VelocityLimboApiImpl api;
     private final AtomicBoolean reloadInProgress = new AtomicBoolean();
 
-    public VlhAdminCommand() {
+    public VlhAdminCommand(VelocityLimboApiImpl api) {
         this.miniMessage = MiniMessage.miniMessage();
+        this.api = api;
     }
 
     @Override
@@ -131,10 +134,8 @@ public class VlhAdminCommand implements SimpleCommand {
         String queueEnabled = VelocityLimboHandler.isQueueEnabled() ? "<green>Enabled</green>" : "<red>Disabled</red>";
         int queuedServers = playerManager.getQueuedServerCount();
         int queuedPlayers = playerManager.getQueuedPlayerCount();
-        int heldPlayers = VelocityLimboHandler.getApiImplementation() == null
-                ? 0 : VelocityLimboHandler.getApiImplementation().heldPlayerCount();
-        int heldServers = VelocityLimboHandler.getApiImplementation() == null
-                ? 0 : VelocityLimboHandler.getApiImplementation().heldServerCount();
+        int heldPlayers = api.heldPlayerCount();
+        int heldServers = api.heldServerCount();
 
         source.sendMessage(miniMessage.deserialize(PREFIX + BORDER));
         send(source, "<gradient:#00D4FF:#7AF7C5><bold>Velocity Limbo Handler Status</bold></gradient>");

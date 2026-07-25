@@ -1,10 +1,12 @@
 package com.akselglyholt.velocityLimboHandler.managers;
 
 import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
+import com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome;
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
@@ -19,6 +21,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.logging.Logger;
 
 public class ReconnectHandler implements AutoCloseable {
@@ -27,18 +30,21 @@ public class ReconnectHandler implements AutoCloseable {
     private final ConfigManager configManager;
     private final Logger logger;
     private final BackendHealthTracker healthTracker;
+    private final VelocityLimboApiImpl api;
 
-    public ReconnectHandler(PlayerManager playerManager, AuthManager authManager, ConfigManager configManager, Logger logger) {
-        this(playerManager, authManager, configManager, logger, new BackendHealthTracker());
+    public ReconnectHandler(PlayerManager playerManager, AuthManager authManager, ConfigManager configManager,
+                            Logger logger, VelocityLimboApiImpl api) {
+        this(playerManager, authManager, configManager, logger, new BackendHealthTracker(), api);
     }
 
     ReconnectHandler(PlayerManager playerManager, AuthManager authManager, ConfigManager configManager, Logger logger,
-                     BackendHealthTracker healthTracker) {
+                     BackendHealthTracker healthTracker, VelocityLimboApiImpl api) {
         this.playerManager = playerManager;
         this.authManager = authManager;
         this.configManager = configManager;
         this.logger = logger;
         this.healthTracker = healthTracker;
+        this.api = api;
     }
 
     public boolean reconnectPlayer(Player player) {
@@ -48,17 +54,20 @@ public class ReconnectHandler implements AutoCloseable {
         RegisteredServer previousServer = playerManager.getPreviousServer(player);
         if (previousServer == null) return false;
 
-        boolean apiLifecycle = playerManager.usesApiLifecycle();
-        if (apiLifecycle) {
-            if (!playerManager.tryClaimConnection(player)) return false;
+        ConnectionClaim claim;
+        if (api.availability() == Availability.READY) {
+            OptionalLong attempt = api.tryClaimConnection(player);
+            if (attempt.isEmpty()) return false;
+            claim = new ConnectionClaim(true, attempt.orElseThrow());
         } else {
             if (playerManager.isPlayerConnecting(player)) return false;
             playerManager.setPlayerConnecting(player, true);
+            claim = new ConnectionClaim(false, 0);
         }
 
         Utility.logDebug(() -> String.format("Pinging %s for %s", previousServer.getServerInfo().getName(), player.getUsername()));
         healthTracker.probe(previousServer).whenComplete((availability, probeThrowable) ->
-                handleProbeResult(player, previousServer, availability, probeThrowable, apiLifecycle)
+                handleProbeResult(player, previousServer, availability, probeThrowable, claim)
         );
 
         return true;
@@ -66,7 +75,7 @@ public class ReconnectHandler implements AutoCloseable {
 
     private void handleProbeResult(Player player, RegisteredServer server,
                                    BackendHealthTracker.Availability availability, Throwable throwable,
-                                   boolean apiLifecycle) {
+                                   ConnectionClaim claim) {
         boolean connectionStarted = false;
         String failure = null;
         try {
@@ -104,7 +113,7 @@ public class ReconnectHandler implements AutoCloseable {
             var connectionFuture = player.createConnectionRequest(server).connect();
             connectionStarted = true;
             connectionFuture.whenComplete((result, connectionThrowable) ->
-                    handleConnectionResult(player, server, result, connectionThrowable, apiLifecycle)
+                    handleConnectionResult(player, server, result, connectionThrowable, claim)
             );
         } catch (RuntimeException exception) {
             failure = exception.getMessage();
@@ -112,14 +121,14 @@ public class ReconnectHandler implements AutoCloseable {
             logger.warning("Failed to start reconnect for " + player.getUsername() + ": " + exception.getMessage());
         } finally {
             if (!connectionStarted) {
-                finishAttempt(player, server, ReconnectOutcome.CONNECTION_FAILURE, failure, apiLifecycle);
+                finishAttempt(player, server, ReconnectOutcome.CONNECTION_FAILURE, failure, claim);
             }
         }
     }
 
     private boolean isHeld(Player player, RegisteredServer server) {
-        return playerManager.isServerHeld(server.getServerInfo().getName())
-                || playerManager.isPlayerHeld(player.getUniqueId());
+        return api.isServerHeld(server.getServerInfo().getName())
+                || api.isPlayerHeld(player.getUniqueId());
     }
 
     private boolean isMaintenanceBlocked(Player player, RegisteredServer server) {
@@ -136,7 +145,7 @@ public class ReconnectHandler implements AutoCloseable {
 
     private void handleConnectionResult(Player player, RegisteredServer server,
                                         ConnectionRequestBuilder.Result result, Throwable throwable,
-                                        boolean apiLifecycle) {
+                                        ConnectionClaim claim) {
         ReconnectOutcome outcome = ReconnectOutcome.CONNECTION_FAILURE;
         String failure = throwable == null ? null : throwable.getMessage();
         try {
@@ -154,7 +163,7 @@ public class ReconnectHandler implements AutoCloseable {
                 outcome = ReconnectOutcome.SUCCESS;
                 Utility.logDebug(() -> String.format("Successfully reconnected %s to %s",
                         player.getUsername(), server.getServerInfo().getName()));
-                playerManager.removePlayerIssue(player);
+                api.setConnectionIssue(player, null);
                 return;
             }
 
@@ -192,14 +201,14 @@ public class ReconnectHandler implements AutoCloseable {
             // CONNECTION_IN_PROGRESS means this request did not take ownership of the
             // other in-flight connection. Release our local claim so a failed/cancelled
             // external request cannot strand the player in CONNECTING forever.
-            finishAttempt(player, server, outcome, failure, apiLifecycle);
+            finishAttempt(player, server, outcome, failure, claim);
         }
     }
 
     private void finishAttempt(Player player, RegisteredServer server, ReconnectOutcome outcome,
-                               String failure, boolean apiLifecycle) {
-        if (apiLifecycle) {
-            playerManager.finishConnectionAttempt(player, server.getServerInfo().getName(), outcome, failure);
+                               String failure, ConnectionClaim claim) {
+        if (claim.apiLifecycle) {
+            api.finishConnectionAttempt(player, claim.attemptId, server.getServerInfo().getName(), outcome, failure);
         } else {
             playerManager.setPlayerConnecting(player, false);
         }
@@ -231,14 +240,12 @@ public class ReconnectHandler implements AutoCloseable {
                             .append(banReason.get());
                 }
                 player.sendMessage(message);
-                playerManager.addPlayerWithIssue(player, "banned");
-                playerManager.removePlayerFromQueue(player);
+                api.setConnectionIssue(player, "banned");
                 return true;
             }
             if (key.contains("not_whitelisted")) {
                 player.sendMessage(MessageFormatter.formatComponent(configManager.getWhitelistedMsg(), player));
-                playerManager.addPlayerWithIssue(player, "not_whitelisted");
-                playerManager.removePlayerFromQueue(player);
+                api.setConnectionIssue(player, "not_whitelisted");
                 return true;
             }
         }
@@ -246,11 +253,13 @@ public class ReconnectHandler implements AutoCloseable {
         if (reason instanceof TextComponent textComponent
                 && textComponent.content().toLowerCase(Locale.ROOT).contains("whitelist")) {
             player.sendMessage(MessageFormatter.formatComponent(configManager.getWhitelistedMsg(), player));
-            playerManager.addPlayerWithIssue(player, "not_whitelisted");
-            playerManager.removePlayerFromQueue(player);
+            api.setConnectionIssue(player, "not_whitelisted");
             return true;
         }
 
         return false;
+    }
+
+    private record ConnectionClaim(boolean apiLifecycle, long attemptId) {
     }
 }

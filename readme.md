@@ -141,6 +141,7 @@ dependencies {
 import com.akselglyholt.velocitylimbohandler.api.LimboController;
 import com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi;
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest;
+import com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
 
@@ -152,13 +153,20 @@ HoldResult deployHold = limbo.holdServer("survival", new HoldRequest("rolling de
 
 limbo.enterLimbo(player,
         EnterRequest.currentServer().withInitialHold(new HoldRequest("awaiting profile")))
-    .thenAccept(result -> logger.info("Limbo entry: " + result));
+    .thenAccept(result -> {
+        logger.info("Limbo entry: " + result.status());
+        if (result.status() == EnterStatus.SUCCESS) {
+            result.initialHold().ifPresent(lease ->
+                    logger.info("Release the initial hold when ready: " + lease.id()));
+        }
+    });
 ```
 
 The root API package contains only `VelocityLimboApi` and `LimboController`. Supporting contracts
 are grouped into the `entry`, `events`, `hold`, `lifecycle`, `player`, and `queue` subpackages.
 
-Each controller can release only its own opaque leases. The first player hold removes that player
+Each controller can release only its own opaque leases. Retain the initial lease ID returned by a
+successful atomic entry and pass it to `releaseHold` when that work is complete. The first player hold removes that player
 from the queue; releasing the final hold reevaluates permissions and appends them to the back of the
 appropriate `BYPASS`, `PRIORITY`, or `NORMAL` tier. Server holds preserve queue positions and block
 new attempts for everyone. Event objects are immutable and non-cancellable; query snapshots when

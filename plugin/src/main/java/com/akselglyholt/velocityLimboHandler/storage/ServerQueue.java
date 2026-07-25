@@ -5,11 +5,12 @@ import com.velocitypowered.api.proxy.Player;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Iterator;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -100,7 +101,8 @@ final class ServerQueue {
         while (true) {
             QueueSnapshot snapshot = snapshotQueue();
             List<UUID> staleEntries = new ArrayList<>();
-            for (UUID playerId : snapshot.playerIds()) {
+            for (QueuedEntry entry : snapshot.entries()) {
+                UUID playerId = entry.playerId();
                 if (activePlayerResolver.apply(playerId) == null) {
                     staleEntries.add(playerId);
                 }
@@ -126,7 +128,8 @@ final class ServerQueue {
             Map<UUID, Integer> positions = new HashMap<>();
             int position = 1;
 
-            for (UUID playerId : snapshot.playerIds()) {
+            for (QueuedEntry entry : snapshot.entries()) {
+                UUID playerId = entry.playerId();
                 if (activePlayerResolver.apply(playerId) != null) {
                     positions.put(playerId, position++);
                 } else {
@@ -151,12 +154,13 @@ final class ServerQueue {
         while (true) {
             QueueSnapshot snapshot = snapshotQueue();
             List<UUID> staleEntries = new ArrayList<>();
-            List<PlayerManager.QueuedPlayer> activePlayers = new ArrayList<>(snapshot.playerIds().size());
+            List<PlayerManager.QueuedPlayer> activePlayers = new ArrayList<>(snapshot.entries().size());
 
-            for (UUID playerId : snapshot.playerIds()) {
+            for (QueuedEntry entry : snapshot.entries()) {
+                UUID playerId = entry.playerId();
                 Player player = activePlayerResolver.apply(playerId);
                 if (player != null) {
-                    activePlayers.add(new PlayerManager.QueuedPlayer(playerId, player.getUsername()));
+                    activePlayers.add(new PlayerManager.QueuedPlayer(playerId, player.getUsername(), entry.tier()));
                 } else {
                     staleEntries.add(playerId);
                 }
@@ -183,7 +187,8 @@ final class ServerQueue {
             List<UUID> staleEntries = new ArrayList<>();
             Player matchedPlayer = null;
 
-            for (UUID playerId : snapshot.playerIds()) {
+            for (QueuedEntry entry : snapshot.entries()) {
+                UUID playerId = entry.playerId();
                 Player player = activePlayerResolver.apply(playerId);
                 if (player == null) {
                     staleEntries.add(playerId);
@@ -225,6 +230,15 @@ final class ServerQueue {
         lock.lock();
         try {
             return tierByPlayer.size();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    Optional<QueueTier> tier(UUID playerId) {
+        lock.lock();
+        try {
+            return Optional.ofNullable(tierByPlayer.get(playerId));
         } finally {
             lock.unlock();
         }
@@ -284,11 +298,11 @@ final class ServerQueue {
     private QueueSnapshot snapshotQueue() {
         lock.lock();
         try {
-            List<UUID> playerIds = new ArrayList<>(tierByPlayer.size());
-            playerIds.addAll(bypass);
-            playerIds.addAll(priority);
-            playerIds.addAll(normal);
-            return new QueueSnapshot(version.get(), playerIds);
+            List<QueuedEntry> entries = new ArrayList<>(tierByPlayer.size());
+            bypass.forEach(playerId -> entries.add(new QueuedEntry(playerId, QueueTier.BYPASS)));
+            priority.forEach(playerId -> entries.add(new QueuedEntry(playerId, QueueTier.PRIORITY)));
+            normal.forEach(playerId -> entries.add(new QueuedEntry(playerId, QueueTier.NORMAL)));
+            return new QueueSnapshot(version.get(), entries);
         } finally {
             lock.unlock();
         }
@@ -339,7 +353,10 @@ final class ServerQueue {
     private record HeadSnapshot(long version, UUID playerId, QueueTier tier) {
     }
 
-    private record QueueSnapshot(long version, List<UUID> playerIds) {
+    private record QueuedEntry(UUID playerId, QueueTier tier) {
+    }
+
+    private record QueueSnapshot(long version, List<QueuedEntry> entries) {
     }
 
 }

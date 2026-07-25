@@ -5,6 +5,7 @@ import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.akselglyholt.velocitylimbohandler.api.LimboController;
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest;
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterResult;
+import com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus;
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerLeftLimboEvent;
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectAttemptEvent;
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectResultEvent;
@@ -35,9 +36,7 @@ import org.mockito.ArgumentCaptor;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -128,8 +127,9 @@ class VelocityLimboApiImplTest {
         assertEquals(HoldReleaseResult.NOT_READY, controller.releaseHold(UUID.randomUUID()));
         assertEquals(0, controller.releaseAllHolds());
         assertEquals(RetargetResult.NOT_READY, controller.retargetPlayer(playerId, "survival"));
-        assertEquals(EnterResult.NOT_READY,
-                controller.enterLimbo(player, EnterRequest.destination("survival")).toCompletableFuture().join());
+        assertEquals(EnterStatus.NOT_READY,
+                controller.enterLimbo(player, EnterRequest.destination("survival"))
+                        .toCompletableFuture().join().status());
     }
 
     @Test
@@ -193,13 +193,14 @@ class VelocityLimboApiImplTest {
         LimboController controller = controller(new Object(), "example");
 
         when(player.isActive()).thenReturn(false);
-        assertEquals(EnterResult.INACTIVE_PLAYER,
-                controller.enterLimbo(player, EnterRequest.destination("survival")).toCompletableFuture().join());
+        assertEquals(EnterStatus.INACTIVE_PLAYER,
+                controller.enterLimbo(player, EnterRequest.destination("survival"))
+                        .toCompletableFuture().join().status());
         when(player.isActive()).thenReturn(true);
-        assertEquals(EnterResult.INVALID_TARGET,
-                controller.enterLimbo(player, EnterRequest.currentServer()).toCompletableFuture().join());
-        assertEquals(EnterResult.UNKNOWN_SERVER,
-                controller.enterLimbo(player, EnterRequest.destination("missing")).toCompletableFuture().join());
+        assertEquals(EnterStatus.INVALID_TARGET,
+                controller.enterLimbo(player, EnterRequest.currentServer()).toCompletableFuture().join().status());
+        assertEquals(EnterStatus.UNKNOWN_SERVER,
+                controller.enterLimbo(player, EnterRequest.destination("missing")).toCompletableFuture().join().status());
     }
 
     @Test
@@ -210,8 +211,9 @@ class VelocityLimboApiImplTest {
 
         try (MockedStatic<VelocityLimboHandler> plugin = mockStatic(VelocityLimboHandler.class)) {
             plugin.when(VelocityLimboHandler::getLimboServer).thenReturn(limbo);
-            assertEquals(EnterResult.ALREADY_MANAGED,
-                    controller.enterLimbo(player, EnterRequest.destination("survival")).toCompletableFuture().join());
+            assertEquals(EnterStatus.ALREADY_MANAGED,
+                    controller.enterLimbo(player, EnterRequest.destination("survival"))
+                            .toCompletableFuture().join().status());
         }
     }
 
@@ -231,13 +233,15 @@ class VelocityLimboApiImplTest {
         when(request.connect()).thenReturn(CompletableFuture.completedFuture(result));
         when(result.isSuccessful()).thenReturn(true);
 
+        EnterResult outcome;
         try (MockedStatic<VelocityLimboHandler> plugin = mockStatic(VelocityLimboHandler.class)) {
             plugin.when(VelocityLimboHandler::getLimboServer).thenReturn(limbo);
             plugin.when(VelocityLimboHandler::getLogger).thenReturn(Logger.getLogger("test"));
-            EnterResult outcome = controller.enterLimbo(player,
+            outcome = controller.enterLimbo(player,
                     EnterRequest.destination("survival").withInitialHold(new HoldRequest("profile sync")))
                     .toCompletableFuture().join();
-            assertEquals(EnterResult.SUCCESS, outcome);
+            assertEquals(EnterStatus.SUCCESS, outcome.status());
+            assertTrue(outcome.initialHold().isPresent());
         }
 
         assertEquals(LimboPhase.ENTERING, api.player(playerId).orElseThrow().phase());
@@ -245,6 +249,10 @@ class VelocityLimboApiImplTest {
         assertEquals(LimboPhase.HELD, api.player(playerId).orElseThrow().phase());
         assertEquals(1, api.player(playerId).orElseThrow().playerHolds().size());
         verify(playerManager, never()).admitPlayer(player, destination);
+
+        assertEquals(HoldReleaseResult.RELEASED,
+                controller.releaseHold(outcome.initialHold().orElseThrow().id()));
+        assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
     }
 
     @Test
@@ -260,8 +268,9 @@ class VelocityLimboApiImplTest {
 
         try (MockedStatic<VelocityLimboHandler> plugin = mockStatic(VelocityLimboHandler.class)) {
             plugin.when(VelocityLimboHandler::getLimboServer).thenReturn(limbo);
-            assertEquals(EnterResult.CONNECTION_IN_PROGRESS,
-                    controller.enterLimbo(player, EnterRequest.destination("survival")).toCompletableFuture().join());
+            assertEquals(EnterStatus.CONNECTION_IN_PROGRESS,
+                    controller.enterLimbo(player, EnterRequest.destination("survival"))
+                            .toCompletableFuture().join().status());
         }
 
         assertTrue(api.player(playerId).isEmpty());
@@ -297,7 +306,7 @@ class VelocityLimboApiImplTest {
         LimboController controller = controller(new Object(), "example");
         managePlayer();
 
-        assertTrue(api.tryClaimConnection(player));
+        assertTrue(api.tryClaimConnection(player).isPresent());
         assertEquals(HoldStatus.CONNECTION_IN_PROGRESS,
                 controller.holdPlayer(playerId, new HoldRequest("too late")).status());
         assertEquals(RetargetResult.CONNECTION_IN_PROGRESS,
@@ -333,34 +342,17 @@ class VelocityLimboApiImplTest {
     }
 
     @Test
-    void queuePermissionChecksDoNotBlockHoldMutations() throws Exception {
-        LimboController controller = controller(new Object(), "example");
+    void queueSnapshotsUseStoredTiersWithoutReevaluatingPermissions() {
         managePlayer();
         when(playerManager.getQueueForServer("survival"))
-                .thenReturn(java.util.List.of(new PlayerManager.QueuedPlayer(playerId, "Tester")));
+                .thenReturn(java.util.List.of(new PlayerManager.QueuedPlayer(
+                        playerId, "Tester", com.akselglyholt.velocityLimboHandler.storage.QueueTier.NORMAL)));
+        when(player.hasPermission(any(String.class))).thenThrow(new AssertionError("permissions must not be read"));
 
-        CountDownLatch permissionCheckStarted = new CountDownLatch(1);
-        CountDownLatch releasePermissionCheck = new CountDownLatch(1);
-        when(player.hasPermission(any(String.class))).thenAnswer(ignored -> {
-            permissionCheckStarted.countDown();
-            releasePermissionCheck.await(5, TimeUnit.SECONDS);
-            return false;
-        });
+        var queue = api.queue("survival");
 
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        try {
-            var queueFuture = executor.submit(() -> api.queue("survival"));
-            assertTrue(permissionCheckStarted.await(2, TimeUnit.SECONDS));
-
-            var holdFuture = executor.submit(() -> controller.holdServer("survival", new HoldRequest("deploy")));
-            assertEquals(HoldStatus.ACQUIRED, holdFuture.get(2, TimeUnit.SECONDS).status());
-
-            releasePermissionCheck.countDown();
-            assertEquals(1, queueFuture.get(2, TimeUnit.SECONDS).players().size());
-        } finally {
-            releasePermissionCheck.countDown();
-            executor.shutdownNow();
-        }
+        assertEquals(QueueTier.NORMAL, queue.players().getFirst().tier());
+        verify(player, never()).hasPermission(any(String.class));
     }
 
     @Test
@@ -418,11 +410,42 @@ class VelocityLimboApiImplTest {
             EnterResult outcome = controller.enterLimbo(player,
                     EnterRequest.destination("survival").withInitialHold(new HoldRequest("atomic")))
                     .toCompletableFuture().join();
-            assertEquals(EnterResult.CONNECTION_FAILURE, outcome);
+            assertEquals(EnterStatus.CONNECTION_FAILURE, outcome.status());
         }
 
         assertTrue(api.player(playerId).isEmpty());
         assertEquals(0, controller.releaseAllHolds());
+    }
+
+    @Test
+    void failedAtomicEntryPreservesHoldsAcquiredByAnotherOwner() {
+        LimboController enteringOwner = controller(new Object(), "entering");
+        LimboController otherOwner = controller(new Object(), "other");
+        RegisteredServer limbo = server("limbo");
+        ConnectionRequestBuilder request = mock(ConnectionRequestBuilder.class);
+        ConnectionRequestBuilder.Result failed = mock(ConnectionRequestBuilder.Result.class);
+        CompletableFuture<ConnectionRequestBuilder.Result> connection = new CompletableFuture<>();
+        when(player.createConnectionRequest(limbo)).thenReturn(request);
+        when(request.connect()).thenReturn(connection);
+        when(failed.isSuccessful()).thenReturn(false);
+        when(failed.getStatus()).thenReturn(ConnectionRequestBuilder.Status.SERVER_DISCONNECTED);
+
+        CompletionStage<EnterResult> pending;
+        try (MockedStatic<VelocityLimboHandler> plugin = mockStatic(VelocityLimboHandler.class)) {
+            plugin.when(VelocityLimboHandler::getLimboServer).thenReturn(limbo);
+            plugin.when(VelocityLimboHandler::getLogger).thenReturn(Logger.getLogger("test"));
+            pending = enteringOwner.enterLimbo(player,
+                    EnterRequest.destination("survival").withInitialHold(new HoldRequest("entry hold")));
+            assertEquals(HoldStatus.ACQUIRED,
+                    otherOwner.holdPlayer(playerId, new HoldRequest("independent hold")).status());
+        }
+
+        connection.complete(failed);
+
+        assertEquals(EnterStatus.CONNECTION_FAILURE, pending.toCompletableFuture().join().status());
+        assertTrue(api.player(playerId).isEmpty());
+        assertEquals(0, enteringOwner.releaseAllHolds());
+        assertEquals(1, otherOwner.releaseAllHolds());
     }
 
     @Test
@@ -476,7 +499,8 @@ class VelocityLimboApiImplTest {
     @Test
     void queueAndSummaryExposePositionsPermissionTiersAndCounts() {
         when(playerManager.getQueueForServer("survival"))
-                .thenReturn(java.util.List.of(new PlayerManager.QueuedPlayer(playerId, "Tester")));
+                .thenReturn(java.util.List.of(new PlayerManager.QueuedPlayer(
+                        playerId, "Tester", com.akselglyholt.velocityLimboHandler.storage.QueueTier.PRIORITY)));
         when(playerManager.getQueuedServerNames()).thenReturn(java.util.List.of("zeta", "survival"));
         when(player.hasPermission("vlh.queue.priority")).thenReturn(true);
 
@@ -515,9 +539,10 @@ class VelocityLimboApiImplTest {
         managePlayer();
         reset(eventManager);
 
-        assertTrue(api.tryClaimConnection(player));
+        long attemptId = api.tryClaimConnection(player).orElseThrow();
         assertEquals(LimboPhase.CONNECTING, api.player(playerId).orElseThrow().phase());
-        api.finishConnectionAttempt(player, "stale-destination", ReconnectOutcome.SERVER_DISCONNECTED, "offline");
+        api.finishConnectionAttempt(
+                player, attemptId, "stale-destination", ReconnectOutcome.SERVER_DISCONNECTED, "offline");
 
         assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
         ArgumentCaptor<PlayerReconnectAttemptEvent> attempt =
@@ -531,6 +556,172 @@ class VelocityLimboApiImplTest {
         assertEquals("survival", result.getValue().destination());
         assertEquals(ReconnectOutcome.SERVER_DISCONNECTED, result.getValue().outcome());
         assertEquals(Optional.of("offline"), result.getValue().failure());
+    }
+
+    @Test
+    void postConnectPublishesSuccessfulReconnectResultBeforeTheFutureCallback() {
+        managePlayer();
+        long attemptId = api.tryClaimConnection(player).orElseThrow();
+        reset(eventManager);
+
+        api.onPlayerLeft(player, destination);
+
+        ArgumentCaptor<PlayerReconnectResultEvent> result =
+                ArgumentCaptor.forClass(PlayerReconnectResultEvent.class);
+        verify(eventManager).fireAndForget(result.capture());
+        assertEquals("survival", result.getValue().destination());
+        assertEquals(ReconnectOutcome.SUCCESS, result.getValue().outcome());
+        assertEquals(Optional.empty(), result.getValue().failure());
+        verify(eventManager).fireAndForget(isA(PlayerLeftLimboEvent.class));
+
+        assertFalse(api.finishConnectionAttempt(
+                player, attemptId, "survival", ReconnectOutcome.SUCCESS, null));
+        verify(eventManager, times(1)).fireAndForget(isA(PlayerReconnectResultEvent.class));
+    }
+
+    @Test
+    void departureToAnotherServerWaitsForTheClaimedAttemptResult() {
+        RegisteredServer otherDestination = server("factions");
+        managePlayer();
+        long attemptId = api.tryClaimConnection(player).orElseThrow();
+        reset(eventManager);
+
+        api.onPlayerLeft(player, otherDestination);
+
+        verify(eventManager, never()).fireAndForget(isA(PlayerReconnectResultEvent.class));
+        verify(eventManager).fireAndForget(isA(PlayerLeftLimboEvent.class));
+
+        assertTrue(api.finishConnectionAttempt(
+                player, attemptId, "stale-destination",
+                ReconnectOutcome.CONNECTION_CANCELLED, "superseded"));
+        ArgumentCaptor<PlayerReconnectResultEvent> result =
+                ArgumentCaptor.forClass(PlayerReconnectResultEvent.class);
+        verify(eventManager).fireAndForget(result.capture());
+        assertEquals("survival", result.getValue().destination());
+        assertEquals(ReconnectOutcome.CONNECTION_CANCELLED, result.getValue().outcome());
+        assertEquals(Optional.of("superseded"), result.getValue().failure());
+    }
+
+    @Test
+    void disconnectDiscardsAnAttemptDetachedByAnotherDeparture() {
+        RegisteredServer otherDestination = server("factions");
+        managePlayer();
+        long attemptId = api.tryClaimConnection(player).orElseThrow();
+        api.onPlayerLeft(player, otherDestination);
+        api.onPlayerDisconnected(player);
+        reset(eventManager);
+
+        assertFalse(api.finishConnectionAttempt(
+                player, attemptId, "survival", ReconnectOutcome.CONNECTION_FAILURE, "late"));
+        verify(eventManager, never()).fireAndForget(isA(PlayerReconnectResultEvent.class));
+    }
+
+    @Test
+    void staleReconnectCompletionCannotMutateAReplacementSession() {
+        managePlayer();
+        long staleAttempt = api.tryClaimConnection(player).orElseThrow();
+        api.onPlayerDisconnected(player);
+
+        Player replacement = mock(Player.class);
+        when(replacement.getUniqueId()).thenReturn(playerId);
+        when(replacement.getUsername()).thenReturn("Replacement");
+        when(replacement.isActive()).thenReturn(true);
+        when(proxy.getPlayer(playerId)).thenReturn(Optional.of(replacement));
+        api.onPlayerArrived(replacement, destination).toCompletableFuture().join();
+        long replacementRevision = api.player(playerId).orElseThrow().revision();
+        reset(eventManager);
+
+        assertFalse(api.finishConnectionAttempt(
+                player, staleAttempt, "survival", ReconnectOutcome.CONNECTION_FAILURE, "late"));
+        assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
+        assertEquals(replacementRevision, api.player(playerId).orElseThrow().revision());
+        verify(eventManager, never()).fireAndForget(isA(PlayerReconnectResultEvent.class));
+    }
+
+    @Test
+    void staleEntryFailureCannotRemoveReplacementSessionHolds() {
+        LimboController enteringOwner = controller(new Object(), "entering");
+        LimboController replacementOwner = controller(new Object(), "replacement");
+        RegisteredServer limbo = server("limbo");
+        ConnectionRequestBuilder request = mock(ConnectionRequestBuilder.class);
+        ConnectionRequestBuilder.Result failed = mock(ConnectionRequestBuilder.Result.class);
+        CompletableFuture<ConnectionRequestBuilder.Result> connection = new CompletableFuture<>();
+        when(player.createConnectionRequest(limbo)).thenReturn(request);
+        when(request.connect()).thenReturn(connection);
+        when(failed.isSuccessful()).thenReturn(false);
+        when(failed.getStatus()).thenReturn(ConnectionRequestBuilder.Status.SERVER_DISCONNECTED);
+
+        CompletionStage<EnterResult> pending;
+        try (MockedStatic<VelocityLimboHandler> plugin = mockStatic(VelocityLimboHandler.class)) {
+            plugin.when(VelocityLimboHandler::getLimboServer).thenReturn(limbo);
+            plugin.when(VelocityLimboHandler::getLogger).thenReturn(Logger.getLogger("test"));
+            pending = enteringOwner.enterLimbo(player,
+                    EnterRequest.destination("survival").withInitialHold(new HoldRequest("old lifecycle")));
+        }
+        api.onPlayerDisconnected(player);
+
+        Player replacement = mock(Player.class);
+        when(replacement.getUniqueId()).thenReturn(playerId);
+        when(replacement.getUsername()).thenReturn("Replacement");
+        when(replacement.isActive()).thenReturn(true);
+        when(proxy.getPlayer(playerId)).thenReturn(Optional.of(replacement));
+        api.onPlayerArrived(replacement, destination).toCompletableFuture().join();
+        replacementOwner.holdPlayer(playerId, new HoldRequest("replacement lifecycle"));
+
+        connection.complete(failed);
+
+        assertEquals(EnterStatus.CONNECTION_FAILURE, pending.toCompletableFuture().join().status());
+        assertEquals(LimboPhase.HELD, api.player(playerId).orElseThrow().phase());
+        assertEquals(java.util.List.of("replacement"),
+                api.player(playerId).orElseThrow().playerHolds().stream()
+                        .map(hold -> hold.ownerId()).toList());
+    }
+
+    @Test
+    void staleEntrySuccessCannotReportSuccessForAReplacementSession() {
+        LimboController controller = controller(new Object(), "entering");
+        RegisteredServer limbo = server("limbo");
+        ConnectionRequestBuilder request = mock(ConnectionRequestBuilder.class);
+        ConnectionRequestBuilder.Result successful = mock(ConnectionRequestBuilder.Result.class);
+        CompletableFuture<ConnectionRequestBuilder.Result> connection = new CompletableFuture<>();
+        when(player.createConnectionRequest(limbo)).thenReturn(request);
+        when(request.connect()).thenReturn(connection);
+        when(successful.isSuccessful()).thenReturn(true);
+
+        CompletionStage<EnterResult> pending;
+        try (MockedStatic<VelocityLimboHandler> plugin = mockStatic(VelocityLimboHandler.class)) {
+            plugin.when(VelocityLimboHandler::getLimboServer).thenReturn(limbo);
+            plugin.when(VelocityLimboHandler::getLogger).thenReturn(Logger.getLogger("test"));
+            pending = controller.enterLimbo(player, EnterRequest.destination("survival"));
+        }
+        api.onPlayerDisconnected(player);
+
+        Player replacement = mock(Player.class);
+        when(replacement.getUniqueId()).thenReturn(playerId);
+        when(replacement.getUsername()).thenReturn("Replacement");
+        when(replacement.isActive()).thenReturn(true);
+        when(proxy.getPlayer(playerId)).thenReturn(Optional.of(replacement));
+        api.onPlayerArrived(replacement, destination).toCompletableFuture().join();
+
+        connection.complete(successful);
+
+        assertEquals(EnterStatus.CONNECTION_FAILURE, pending.toCompletableFuture().join().status());
+        assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
+    }
+
+    @Test
+    void everyVisibleHoldChangeAdvancesThePlayerRevision() {
+        LimboController controller = controller(new Object(), "example");
+        managePlayer();
+        var first = controller.holdPlayer(playerId, new HoldRequest("first"));
+        controller.holdPlayer(playerId, new HoldRequest("second"));
+        long beforeRelease = api.player(playerId).orElseThrow().revision();
+
+        controller.releaseHold(first.lease().orElseThrow().id());
+
+        var after = api.player(playerId).orElseThrow();
+        assertEquals(1, after.playerHolds().size());
+        assertTrue(after.revision() > beforeRelease);
     }
 
     @Test
@@ -555,11 +746,11 @@ class VelocityLimboApiImplTest {
         managePlayer();
         when(playerManager.getConnectionIssue(playerId)).thenReturn("maintenance");
 
-        api.setConnectionIssue(player, true);
+        api.setConnectionIssue(player, "maintenance");
         assertEquals(LimboPhase.CONNECTION_ISSUE, api.player(playerId).orElseThrow().phase());
         assertEquals(Optional.of("maintenance"), api.player(playerId).orElseThrow().connectionIssue());
 
-        api.setConnectionIssue(player, false);
+        api.setConnectionIssue(player, null);
         assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
     }
 

@@ -6,6 +6,7 @@ import com.akselglyholt.velocitylimbohandler.api.LimboController;
 import com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi;
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest;
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterResult;
+import com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus;
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerEnteredLimboEvent;
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerLeftLimboEvent;
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerLimboStateChangedEvent;
@@ -49,6 +50,7 @@ import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -59,8 +61,10 @@ import java.util.logging.Level;
 
 /** Runtime implementation kept out of the published API artifact. */
 public final class VelocityLimboApiImpl implements VelocityLimboApi {
-    public static final String AUTH_OWNER = "velocity-limbo-handler:authentication";
+    private static final String AUTH_OWNER = "velocity-limbo-handler:authentication";
     private static final long INCIDENTAL_INTENT_MAX_AGE_SECONDS = 60;
+    private static final long DETACHED_ATTEMPT_MAX_AGE_SECONDS = 300;
+    private static final int MAX_DETACHED_ATTEMPTS = 1024;
 
     private final Object lock = new Object();
     private final ProxyServer proxy;
@@ -73,12 +77,15 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private final Map<String, LinkedHashSet<UUID>> serverLeaseIds = new HashMap<>();
     private final Map<String, LinkedHashSet<UUID>> ownerLeaseIds = new HashMap<>();
     private final Map<String, String> serverHoldTargets = new HashMap<>();
+    private final Map<Long, DetachedConnectionAttempt> detachedConnectionAttempts = new LinkedHashMap<>();
     private final NavigableMap<Instant, LinkedHashSet<UUID>> expirations = new TreeMap<>();
     private ScheduledTask expiryTask;
     private Instant expiryTaskAt;
     private long expiryGeneration;
     private volatile Availability availability = Availability.STARTING;
     private long revision;
+    private long lifecycleGeneration;
+    private long connectionAttemptGeneration;
 
     public VelocityLimboApiImpl(ProxyServer proxy, VelocityLimboHandler plugin, PlayerManager playerManager) {
         this.proxy = Objects.requireNonNull(proxy, "proxy");
@@ -109,6 +116,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             serverLeaseIds.clear();
             ownerLeaseIds.clear();
             serverHoldTargets.clear();
+            detachedConnectionAttempts.clear();
             players.clear();
             revision++;
         }
@@ -141,30 +149,44 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     @Override
     public List<QueueSummary> queues() {
         expireDueLeases();
-        Map<String, String> names = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        playerManager.getQueuedServerNames().forEach(name -> names.put(name, name));
         synchronized (lock) {
+            Map<String, String> names = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            playerManager.getQueuedServerNames().forEach(name -> names.put(name, name));
             serverHoldTargets.values().forEach(name -> names.put(name, name));
+            return names.values().stream().map(this::queueSummary).toList();
         }
-        return names.values().stream().map(this::queueSummary).toList();
     }
 
     public CompletionStage<Void> onPlayerArrived(Player player, RegisteredServer fallbackDestination) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(fallbackDestination, "fallbackDestination");
+        if (proxy.getPlayer(player.getUniqueId()).filter(current -> current == player && current.isActive()).isEmpty()) {
+            return CompletableFuture.completedFuture(null);
+        }
         ManagedPlayerSnapshot entered;
         synchronized (lock) {
             EntryIntent intent = entryIntents.remove(player.getUniqueId());
+            if (intent != null && intent.player != player) {
+                intent = null;
+            }
             if (intent != null && !intent.apiEntry
                     && intent.createdAt.plusSeconds(INCIDENTAL_INTENT_MAX_AGE_SECONDS).isBefore(Instant.now())) {
                 intent = null;
             }
             String destination = intent == null ? fallbackDestination.getServerInfo().getName() : intent.destination;
-            ManagedState state = players.computeIfAbsent(player.getUniqueId(), ignored -> new ManagedState());
+            ManagedState state = players.get(player.getUniqueId());
+            if (state == null || state.player != player
+                    || (intent != null && intent.apiEntry && state.generation != intent.lifecycleGeneration)) {
+                if (state != null) removePlayerLocked(player.getUniqueId());
+                state = new ManagedState();
+                state.generation = ++lifecycleGeneration;
+                players.put(player.getUniqueId(), state);
+            }
+            state.player = player;
             state.username = player.getUsername();
             state.destination = destination;
             state.phase = LimboPhase.ADMITTING;
-            state.revision = ++revision;
+            revision++;
             playerManager.registerPlayerInLimbo(player, requireRegisteredServer(destination));
             entered = snapshotLocked(player.getUniqueId());
         }
@@ -197,15 +219,16 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             ManagedState state = players.get(player.getUniqueId());
             if (state == null) {
                 entryIntents.put(player.getUniqueId(), new EntryIntent(
-                        intendedServer.getServerInfo().getName(), false, Instant.now()));
+                        intendedServer.getServerInfo().getName(), false, Instant.now(), player, 0));
                 return;
             }
+            if (state.player != player) return;
             if (state.phase == LimboPhase.CONNECTING) return;
             before = snapshotLocked(player.getUniqueId());
             state.destination = intendedServer.getServerInfo().getName();
             playerManager.retargetPlayer(player, intendedServer,
                     state.phase == LimboPhase.WAITING && !hasPlayerHoldsLocked(player.getUniqueId()));
-            state.revision = ++revision;
+            revision++;
             after = snapshotLocked(player.getUniqueId());
         }
         publishTransition(before, after);
@@ -217,7 +240,8 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         ManagedPlayerSnapshot after;
         synchronized (lock) {
             ManagedState state = players.get(player.getUniqueId());
-            if (state == null || state.phase != LimboPhase.ADMITTING || !player.isActive()) {
+            if (state == null || state.player != player
+                    || state.phase != LimboPhase.ADMITTING || !player.isActive()) {
                 return;
             }
             before = snapshotLocked(player.getUniqueId());
@@ -232,25 +256,49 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                 playerManager.admitPlayer(player, requireRegisteredServer(state.destination));
                 state.phase = LimboPhase.WAITING;
             }
-            state.revision = ++revision;
+            revision++;
             after = snapshotLocked(player.getUniqueId());
         }
         publishTransition(before, after);
     }
 
-    public void onPlayerLeft(Player player) {
+    public void onPlayerLeft(Player player, RegisteredServer connectedServer) {
+        Objects.requireNonNull(connectedServer, "connectedServer");
+        removePlayer(player, connectedServer.getServerInfo().getName());
+    }
+
+    public void onPlayerDisconnected(Player player) {
+        removePlayer(player, null);
+    }
+
+    private void removePlayer(Player player, String connectedDestination) {
         ManagedPlayerSnapshot snapshot;
+        String successfulDestination = null;
         synchronized (lock) {
+            if (connectedDestination == null) {
+                detachedConnectionAttempts.values().removeIf(attempt -> attempt.player == player);
+            }
+            ManagedState state = players.get(player.getUniqueId());
+            if (state == null || state.player != player) return;
+            if (state.connectionAttempt != 0 && connectedDestination != null
+                    && state.destination.equalsIgnoreCase(connectedDestination)) {
+                state.connectionAttempt = 0;
+                successfulDestination = state.destination;
+            } else if (state.connectionAttempt != 0 && connectedDestination != null) {
+                rememberDetachedAttemptLocked(state.connectionAttempt, player, state.destination);
+                state.connectionAttempt = 0;
+            }
             snapshot = snapshotLocked(player.getUniqueId());
+            playerManager.removePlayer(player);
             removePlayerLocked(player.getUniqueId());
+        }
+        if (successfulDestination != null) {
+            proxy.getEventManager().fireAndForget(new PlayerReconnectResultEvent(
+                    player, successfulDestination, ReconnectOutcome.SUCCESS, Optional.empty()));
         }
         if (snapshot != null) {
             proxy.getEventManager().fireAndForget(new PlayerLeftLimboEvent(player, snapshot));
         }
-    }
-
-    public void onPlayerDisconnected(Player player) {
-        onPlayerLeft(player);
     }
 
     private void removePlayerLocked(UUID playerId) {
@@ -276,41 +324,50 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     /** Atomically claims an eligible managed player before a probe or connection begins. */
-    public boolean tryClaimConnection(Player player) {
+    public OptionalLong tryClaimConnection(Player player) {
         expireDueLeases();
         ManagedPlayerSnapshot before;
         ManagedPlayerSnapshot after;
+        long attemptId;
         synchronized (lock) {
             ManagedState state = players.get(player.getUniqueId());
-            if (state == null || state.phase == LimboPhase.CONNECTING || state.phase == LimboPhase.ENTERING
+            if (state == null || state.player != player
+                    || state.phase == LimboPhase.CONNECTING || state.phase == LimboPhase.ENTERING
                     || state.phase == LimboPhase.ADMITTING || state.phase == LimboPhase.CONNECTION_ISSUE
                     || hasPlayerHoldsLocked(player.getUniqueId()) || isServerHeldLocked(state.destination)) {
-                return false;
+                return OptionalLong.empty();
             }
             before = snapshotLocked(player.getUniqueId());
             state.phase = LimboPhase.CONNECTING;
-            state.revision = ++revision;
+            state.connectionAttempt = attemptId = ++connectionAttemptGeneration;
+            revision++;
             after = snapshotLocked(player.getUniqueId());
         }
         publishTransition(before, after);
         proxy.getEventManager().fireAndForget(new PlayerReconnectAttemptEvent(player, after));
-        return true;
+        return OptionalLong.of(attemptId);
     }
 
-    public void finishConnectionAttempt(Player player, String attemptedDestination, ReconnectOutcome outcome, String failure) {
+    public boolean finishConnectionAttempt(Player player, long attemptId, String attemptedDestination,
+                                           ReconnectOutcome outcome, String failure) {
         ManagedPlayerSnapshot before = null;
         ManagedPlayerSnapshot after = null;
         String destination = attemptedDestination;
         synchronized (lock) {
             ManagedState state = players.get(player.getUniqueId());
-            if (state != null) {
+            if (state == null || state.player != player || state.connectionAttempt != attemptId) {
+                DetachedConnectionAttempt detached = takeDetachedAttemptLocked(attemptId, player);
+                if (detached == null) return false;
+                destination = detached.destination;
+            } else {
+                state.connectionAttempt = 0;
                 destination = state.destination;
                 before = snapshotLocked(player.getUniqueId());
                 if (outcome != ReconnectOutcome.SUCCESS) {
                     state.phase = playerManager.hasConnectionIssue(player)
                             ? LimboPhase.CONNECTION_ISSUE
                             : hasPlayerHoldsLocked(player.getUniqueId()) ? LimboPhase.HELD : LimboPhase.WAITING;
-                    state.revision = ++revision;
+                    revision++;
                     after = snapshotLocked(player.getUniqueId());
                 }
             }
@@ -318,26 +375,61 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         if (before != null && after != null) publishTransition(before, after);
         proxy.getEventManager().fireAndForget(new PlayerReconnectResultEvent(
                 player, destination, outcome, Optional.ofNullable(failure)));
+        return true;
     }
 
-    public void setConnectionIssue(Player player, boolean present) {
+    private void rememberDetachedAttemptLocked(long attemptId, Player player, String destination) {
+        Instant now = Instant.now();
+        detachedConnectionAttempts.values().removeIf(attempt ->
+                attempt.detachedAt.plusSeconds(DETACHED_ATTEMPT_MAX_AGE_SECONDS).isBefore(now));
+        while (detachedConnectionAttempts.size() >= MAX_DETACHED_ATTEMPTS) {
+            var iterator = detachedConnectionAttempts.keySet().iterator();
+            if (!iterator.hasNext()) break;
+            iterator.next();
+            iterator.remove();
+        }
+        detachedConnectionAttempts.put(attemptId, new DetachedConnectionAttempt(player, destination, now));
+    }
+
+    private DetachedConnectionAttempt takeDetachedAttemptLocked(long attemptId, Player player) {
+        DetachedConnectionAttempt attempt = detachedConnectionAttempts.remove(attemptId);
+        if (attempt == null || attempt.player != player
+                || attempt.detachedAt.plusSeconds(DETACHED_ATTEMPT_MAX_AGE_SECONDS).isBefore(Instant.now())) {
+            return null;
+        }
+        return attempt;
+    }
+
+    public void setConnectionIssue(Player player, String issue) {
         ManagedPlayerSnapshot before;
         ManagedPlayerSnapshot after;
         synchronized (lock) {
             ManagedState state = players.get(player.getUniqueId());
-            if (state == null) return;
+            if (state == null || state.player != player) return;
             before = snapshotLocked(player.getUniqueId());
-            if (present) {
+            if (issue != null) {
+                playerManager.addPlayerWithIssue(player, issue);
+                playerManager.removePlayerFromQueue(player);
                 state.phase = LimboPhase.CONNECTION_ISSUE;
-            } else if (hasPlayerHoldsLocked(player.getUniqueId())) {
+            } else {
+                playerManager.removePlayerIssue(player);
+            }
+            if (issue == null && hasPlayerHoldsLocked(player.getUniqueId())) {
                 state.phase = LimboPhase.HELD;
-            } else if (state.phase != LimboPhase.CONNECTING) {
+            } else if (issue == null && state.phase != LimboPhase.CONNECTING) {
                 state.phase = LimboPhase.WAITING;
             }
-            state.revision = ++revision;
+            revision++;
             after = snapshotLocked(player.getUniqueId());
         }
         publishTransition(before, after);
+    }
+
+    public boolean isConnectionClaimed(Player player) {
+        synchronized (lock) {
+            ManagedState state = players.get(player.getUniqueId());
+            return state != null && state.player == player && state.phase == LimboPhase.CONNECTING;
+        }
     }
 
     public void setAuthenticationBlocked(UUID playerId, boolean blocked, String reason) {
@@ -392,7 +484,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             if (state.phase != LimboPhase.ADMITTING && state.phase != LimboPhase.ENTERING) {
                 state.phase = LimboPhase.HELD;
             }
-            state.revision = ++revision;
+            revision++;
             after = snapshotLocked(playerId);
         }
         publishTransition(before, after);
@@ -475,7 +567,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             playerManager.admitPlayer(player, requireRegisteredServer(state.destination));
             state.phase = LimboPhase.WAITING;
         }
-        state.revision = ++revision;
+        revision++;
         return snapshotLocked(playerId);
     }
 
@@ -506,14 +598,17 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         synchronized (lock) {
             ManagedState state = players.get(playerId);
             Player player = proxy.getPlayer(playerId).filter(Player::isActive).orElse(null);
-            if (state == null || player == null) return RetargetResult.INACTIVE_OR_UNMANAGED_PLAYER;
+            if (state == null || player == null || state.player != player) {
+                return RetargetResult.INACTIVE_OR_UNMANAGED_PLAYER;
+            }
             if (state.phase == LimboPhase.CONNECTING) return RetargetResult.CONNECTION_IN_PROGRESS;
             before = snapshotLocked(playerId);
             state.destination = server.getServerInfo().getName();
             entryIntents.computeIfPresent(playerId, (ignored, intent) ->
-                    new EntryIntent(state.destination, intent.apiEntry, intent.createdAt));
+                    new EntryIntent(state.destination, intent.apiEntry, intent.createdAt,
+                            intent.player, intent.lifecycleGeneration));
             playerManager.retargetPlayer(player, server, state.phase == LimboPhase.WAITING && !hasPlayerHoldsLocked(playerId));
-            state.revision = ++revision;
+            revision++;
             after = snapshotLocked(playerId);
         }
         publishTransition(before, after);
@@ -523,8 +618,8 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private CompletionStage<EnterResult> enter(String ownerId, Player player, EnterRequest request) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(request, "request");
-        if (availability != Availability.READY) return CompletableFuture.completedFuture(EnterResult.NOT_READY);
-        if (!player.isActive()) return CompletableFuture.completedFuture(EnterResult.INACTIVE_PLAYER);
+        if (availability != Availability.READY) return failedEntry(EnterStatus.NOT_READY);
+        if (!player.isActive()) return failedEntry(EnterStatus.INACTIVE_PLAYER);
 
         RegisteredServer target;
         if (request.destination().isPresent()) {
@@ -532,62 +627,84 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             try {
                 requested = requireServerName(request.destination().orElseThrow());
             } catch (IllegalArgumentException exception) {
-                return CompletableFuture.completedFuture(EnterResult.INVALID_TARGET);
+                return failedEntry(EnterStatus.INVALID_TARGET);
             }
             target = proxy.getServer(requested).orElse(null);
-            if (target == null) return CompletableFuture.completedFuture(EnterResult.UNKNOWN_SERVER);
+            if (target == null) return failedEntry(EnterStatus.UNKNOWN_SERVER);
         } else {
             target = player.getCurrentServer().map(connection -> connection.getServer()).orElse(null);
-            if (target == null) return CompletableFuture.completedFuture(EnterResult.INVALID_TARGET);
+            if (target == null) return failedEntry(EnterStatus.INVALID_TARGET);
         }
         if (isLimboServer(target.getServerInfo().getName())) {
-            return CompletableFuture.completedFuture(EnterResult.INVALID_TARGET);
+            return failedEntry(EnterStatus.INVALID_TARGET);
         }
         RegisteredServer limbo = VelocityLimboHandler.getLimboServer();
-        if (limbo == null) return CompletableFuture.completedFuture(EnterResult.NOT_READY);
+        if (limbo == null) return failedEntry(EnterStatus.NOT_READY);
 
+        long generation;
+        Optional<HoldLease> initialLease = Optional.empty();
         synchronized (lock) {
             if (players.containsKey(player.getUniqueId()) || playerManager.isPlayerRegistered(player)) {
-                return CompletableFuture.completedFuture(EnterResult.ALREADY_MANAGED);
+                return failedEntry(EnterStatus.ALREADY_MANAGED);
             }
             ManagedState state = new ManagedState();
+            state.player = player;
+            state.generation = generation = ++lifecycleGeneration;
             state.username = player.getUsername();
             state.destination = target.getServerInfo().getName();
             state.phase = LimboPhase.ENTERING;
-            state.revision = ++revision;
+            revision++;
             players.put(player.getUniqueId(), state);
             if (request.initialHold().isPresent()) {
-                acquirePlayerHoldLocked(ownerId, player.getUniqueId(), request.initialHold().orElseThrow());
+                initialLease = acquirePlayerHoldLocked(ownerId, player.getUniqueId(),
+                        request.initialHold().orElseThrow()).lease();
             }
-            entryIntents.put(player.getUniqueId(), new EntryIntent(state.destination, true, Instant.now()));
+            entryIntents.put(player.getUniqueId(), new EntryIntent(
+                    state.destination, true, Instant.now(), player, generation));
         }
 
+        Optional<HoldLease> acquiredInitialLease = initialLease;
         try {
             return player.createConnectionRequest(limbo).connect().handle((result, throwable) -> {
                 if (throwable != null || result == null || !result.isSuccessful()) {
-                    cleanupFailedEntry(player.getUniqueId());
+                    cleanupFailedEntry(player, generation, acquiredInitialLease);
                     if (result != null && result.getStatus() == ConnectionRequestBuilder.Status.CONNECTION_IN_PROGRESS) {
-                        return EnterResult.CONNECTION_IN_PROGRESS;
+                        return EnterResult.failed(EnterStatus.CONNECTION_IN_PROGRESS);
                     }
-                    return EnterResult.CONNECTION_FAILURE;
+                    return EnterResult.failed(EnterStatus.CONNECTION_FAILURE);
                 }
-                return EnterResult.SUCCESS;
+                return isCurrentLifecycle(player, generation)
+                        ? EnterResult.success(acquiredInitialLease)
+                        : EnterResult.failed(EnterStatus.CONNECTION_FAILURE);
             });
         } catch (RuntimeException exception) {
-            cleanupFailedEntry(player.getUniqueId());
-            return CompletableFuture.completedFuture(EnterResult.CONNECTION_FAILURE);
+            cleanupFailedEntry(player, generation, acquiredInitialLease);
+            return failedEntry(EnterStatus.CONNECTION_FAILURE);
         }
     }
 
-    private void cleanupFailedEntry(UUID playerId) {
+    private CompletionStage<EnterResult> failedEntry(EnterStatus status) {
+        return CompletableFuture.completedFuture(EnterResult.failed(status));
+    }
+
+    private boolean isCurrentLifecycle(Player player, long generation) {
         synchronized (lock) {
-            entryIntents.remove(playerId);
-            List<UUID> abandonedHolds = playerLeaseIds.getOrDefault(playerId, new LinkedHashSet<>()).stream()
-                    .map(leases::get).filter(Objects::nonNull)
-                    .filter(lease -> !lease.ownerId.equals(AUTH_OWNER)).map(lease -> lease.id).toList();
-            abandonedHolds.forEach(this::removeLeaseLocked);
+            ManagedState state = players.get(player.getUniqueId());
+            return state != null && state.player == player && state.generation == generation;
+        }
+    }
+
+    private void cleanupFailedEntry(Player player, long generation, Optional<HoldLease> initialLease) {
+        UUID playerId = player.getUniqueId();
+        synchronized (lock) {
             ManagedState state = players.get(playerId);
-            if (state != null && state.phase == LimboPhase.ENTERING) players.remove(playerId);
+            if (state == null || state.player != player || state.generation != generation
+                    || state.phase != LimboPhase.ENTERING) {
+                return;
+            }
+            entryIntents.remove(playerId);
+            initialLease.map(HoldLease::id).ifPresent(this::removeLeaseLocked);
+            players.remove(playerId);
             revision++;
         }
     }
@@ -599,35 +716,29 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         String username = player == null ? state.username : player.getUsername();
         int position = player == null ? -1 : playerManager.getQueuePosition(player);
         OptionalInt positionValue = position > 0 ? OptionalInt.of(position) : OptionalInt.empty();
-        Optional<QueueTier> tier = position > 0 && player != null
-                ? Optional.of(tierFor(player, state.destination)) : Optional.empty();
+        Optional<QueueTier> tier = position > 0
+                ? playerManager.getQueueTier(playerId, state.destination).map(this::apiTier)
+                : Optional.empty();
         return new ManagedPlayerSnapshot(playerId, username == null ? playerId.toString() : username,
                 state.phase, state.destination, positionValue, tier,
                 Optional.ofNullable(playerManager.getConnectionIssue(playerId)),
-                playerHoldsLocked(playerId), serverHoldsLocked(state.destination), state.revision);
+                playerHoldsLocked(playerId), serverHoldsLocked(state.destination), revision);
     }
 
     private QueueSnapshot queueSnapshot(String serverName) {
-        List<PlayerManager.QueuedPlayer> queue = playerManager.getQueueForServer(serverName);
-        Map<UUID, Long> playerRevisions = new HashMap<>();
+        List<QueuedPlayerSnapshot> entries;
         List<HoldSnapshot> serverHolds;
         long snapshotRevision;
         synchronized (lock) {
-            for (PlayerManager.QueuedPlayer queued : queue) {
-                ManagedState state = players.get(queued.uuid());
-                if (state != null) playerRevisions.put(queued.uuid(), state.revision);
-            }
+            List<PlayerManager.QueuedPlayer> queue = playerManager.getQueueForServer(serverName);
             serverHolds = serverHoldsLocked(serverName);
             snapshotRevision = revision;
-        }
-
-        List<QueuedPlayerSnapshot> entries = new ArrayList<>(queue.size());
-        int position = 1;
-        for (PlayerManager.QueuedPlayer queued : queue) {
-            Player player = proxy.getPlayer(queued.uuid()).orElse(null);
-            QueueTier tier = player == null ? QueueTier.NORMAL : tierFor(player, serverName);
-            entries.add(new QueuedPlayerSnapshot(queued.uuid(), queued.name(), position++, tier,
-                    playerRevisions.getOrDefault(queued.uuid(), snapshotRevision)));
+            entries = new ArrayList<>(queue.size());
+            int position = 1;
+            for (PlayerManager.QueuedPlayer queued : queue) {
+                entries.add(new QueuedPlayerSnapshot(queued.uuid(), queued.name(), position++,
+                        apiTier(queued.tier()), snapshotRevision));
+            }
         }
         return new QueueSnapshot(canonicalServerName(serverName), entries, serverHolds, snapshotRevision);
     }
@@ -822,15 +933,12 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         return limbo != null && limbo.getServerInfo().getName().equalsIgnoreCase(name);
     }
 
-    private QueueTier tierFor(Player player, String serverName) {
-        String normalized = serverName.toLowerCase(Locale.ROOT);
-        if (player.hasPermission("vlh.queue.bypass") || player.hasPermission("vlh.queue.bypass." + normalized)) {
-            return QueueTier.BYPASS;
-        }
-        if (player.hasPermission("vlh.queue.priority") || player.hasPermission("vlh.queue.priority." + normalized)) {
-            return QueueTier.PRIORITY;
-        }
-        return QueueTier.NORMAL;
+    private QueueTier apiTier(com.akselglyholt.velocityLimboHandler.storage.QueueTier tier) {
+        return switch (tier) {
+            case BYPASS -> QueueTier.BYPASS;
+            case PRIORITY -> QueueTier.PRIORITY;
+            case NORMAL -> QueueTier.NORMAL;
+        };
     }
 
     private void publishTransition(ManagedPlayerSnapshot before, ManagedPlayerSnapshot after) {
@@ -904,13 +1012,18 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     }
 
     private static final class ManagedState {
+        private Player player;
+        private long generation;
+        private long connectionAttempt;
         private String username;
         private String destination;
         private LimboPhase phase;
-        private long revision;
     }
 
-    private record EntryIntent(String destination, boolean apiEntry, Instant createdAt) { }
+    private record EntryIntent(String destination, boolean apiEntry, Instant createdAt,
+                               Player player, long lifecycleGeneration) { }
+
+    private record DetachedConnectionAttempt(Player player, String destination, Instant detachedAt) { }
 
     private record LeaseHandle(UUID id) implements HoldLease { }
 

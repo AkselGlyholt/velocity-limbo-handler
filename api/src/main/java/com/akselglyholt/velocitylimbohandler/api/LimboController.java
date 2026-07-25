@@ -15,6 +15,10 @@ import java.util.concurrent.CompletionStage;
 public interface LimboController {
     String ownerId();
 
+    /**
+     * Requests an atomic move into limbo. A successful result contains the owner-scoped initial hold
+     * when {@link EnterRequest#withInitialHold(HoldRequest)} was used.
+     */
     CompletionStage<EnterResult> enterLimbo(Player player, EnterRequest request);
 
     HoldResult holdPlayer(UUID playerId, HoldRequest request);

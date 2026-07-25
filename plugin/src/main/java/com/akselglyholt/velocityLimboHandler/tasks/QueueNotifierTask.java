@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.tasks;
 
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.misc.MessageFormatter;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
@@ -19,17 +20,19 @@ public class QueueNotifierTask implements Runnable {
     private final RegisteredServer limboServer;
     private final PlayerManager playerManager;
     private final ConfigManager configManager;
+    private final VelocityLimboApiImpl api;
     private final ArrayDeque<UUID> pendingPlayers = new ArrayDeque<>();
     private long nextCycleAtNanos;
     private long nextDispatchAtNanos;
     private long dispatchSpacingNanos;
 
     public QueueNotifierTask(ProxyServer proxyServer, RegisteredServer limboServer, PlayerManager playerManager,
-                             ConfigManager configManager) {
+                             ConfigManager configManager, VelocityLimboApiImpl api) {
         this.proxyServer = proxyServer;
         this.limboServer = limboServer;
         this.playerManager = playerManager;
         this.configManager = configManager;
+        this.api = api;
     }
 
     @Override
@@ -74,7 +77,7 @@ public class QueueNotifierTask implements Runnable {
     }
 
     private void notifyPlayer(Player player, Map<String, Boolean> maintenanceCache) {
-        if (playerManager.isPlayerHeld(player.getUniqueId())) {
+        if (api.isPlayerHeld(player.getUniqueId())) {
             return;
         }
         String issue = playerManager.getConnectionIssue(player);

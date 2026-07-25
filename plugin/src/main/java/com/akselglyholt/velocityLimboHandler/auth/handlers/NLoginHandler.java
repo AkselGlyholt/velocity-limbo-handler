@@ -2,6 +2,7 @@ package com.akselglyholt.velocityLimboHandler.auth.handlers;
 
 import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.auth.AuthHandler;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
@@ -18,12 +19,14 @@ public class NLoginHandler implements AuthHandler {
     private final ProxyServer proxy;
     private final ReconnectBlocker blocker;
     private final boolean active;
+    private final VelocityLimboApiImpl api;
     private final Logger logger = VelocityLimboHandler.getLogger();
     private final PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
 
-    public NLoginHandler(ProxyServer proxy, ReconnectBlocker blocker) {
+    public NLoginHandler(ProxyServer proxy, ReconnectBlocker blocker, VelocityLimboApiImpl api) {
         this.proxy = proxy;
         this.blocker = blocker;
+        this.api = api;
 
         boolean detected = proxy.getPluginManager().getPlugin("nlogin").isPresent()
                 || classPresent("com.nickuc.login.api.NLoginAPI");
@@ -90,7 +93,7 @@ public class NLoginHandler implements AuthHandler {
         }
 
         // Let plugin-initiated connections pass through
-        if (VelocityLimboHandler.getPlayerManager().isPlayerConnecting(player)) {
+        if (api.isConnectionClaimed(player) || playerManager.isPlayerConnecting(player)) {
             return;
         }
 
@@ -100,8 +103,8 @@ public class NLoginHandler implements AuthHandler {
         }
 
         // ConnectionListener owns reroutes for held players and queued or held destinations.
-        if (playerManager.isPlayerHeld(player.getUniqueId())
-                || playerManager.isServerHeld(intendedServer.getServerInfo().getName())
+        if (api.isPlayerHeld(player.getUniqueId())
+                || api.isServerHeld(intendedServer.getServerInfo().getName())
                 || playerManager.hasQueuedPlayers(intendedServer)) {
             return;
         }

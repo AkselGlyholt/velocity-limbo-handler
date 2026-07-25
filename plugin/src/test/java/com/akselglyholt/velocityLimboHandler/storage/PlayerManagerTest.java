@@ -109,7 +109,6 @@ class PlayerManagerTest {
         playerManager.removePlayer(player);
 
         assertFalse(playerManager.isPlayerRegistered(player));
-        verify(reconnectBlocker).unblock(uuid);
     }
 
     @Test

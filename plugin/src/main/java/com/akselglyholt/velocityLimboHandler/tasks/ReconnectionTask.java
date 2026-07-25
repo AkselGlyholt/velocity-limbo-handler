@@ -1,6 +1,7 @@
 package com.akselglyholt.velocityLimboHandler.tasks;
 
 import com.akselglyholt.velocityLimboHandler.auth.AuthManager;
+import com.akselglyholt.velocityLimboHandler.api.VelocityLimboApiImpl;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.managers.ReconnectHandler;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
@@ -23,16 +24,19 @@ public class ReconnectionTask implements Runnable {
     private final AuthManager authManager;
     private final ConfigManager configManager;
     private final ReconnectHandler reconnectHandler;
+    private final VelocityLimboApiImpl api;
     private int serverCursor;
 
     public ReconnectionTask(ProxyServer proxyServer, RegisteredServer limboServer, PlayerManager playerManager,
-                            AuthManager authManager, ConfigManager configManager, ReconnectHandler reconnectHandler) {
+                            AuthManager authManager, ConfigManager configManager, ReconnectHandler reconnectHandler,
+                            VelocityLimboApiImpl api) {
         this.proxyServer = proxyServer;
         this.limboServer = limboServer;
         this.playerManager = playerManager;
         this.authManager = authManager;
         this.configManager = configManager;
         this.reconnectHandler = reconnectHandler;
+        this.api = api;
     }
 
     @Override
@@ -64,7 +68,7 @@ public class ReconnectionTask implements Runnable {
         for (int offset = 0; offset < batchSize; offset++) {
             String serverName = queuedServerNames.get((startIndex + offset) % serverCount);
             RegisteredServer server = proxyServer.getServer(serverName).orElse(null);
-            if (server == null || playerManager.isServerHeld(serverName)) {
+            if (server == null || api.isServerHeld(serverName)) {
                 continue;
             }
 
@@ -87,13 +91,13 @@ public class ReconnectionTask implements Runnable {
     private void processQueueDisabled(Collection<Player> connectedPlayers) {
         Map<String, Boolean> maintenanceCache = new HashMap<>();
         for (Player player : connectedPlayers) {
-            if (playerManager.hasConnectionIssue(player) || playerManager.isPlayerHeld(player.getUniqueId())
+            if (playerManager.hasConnectionIssue(player) || api.isPlayerHeld(player.getUniqueId())
                     || !player.isActive()) {
                 continue;
             }
 
             RegisteredServer previousServer = playerManager.getPreviousServer(player);
-            if (previousServer == null || playerManager.isServerHeld(previousServer.getServerInfo().getName())) {
+            if (previousServer == null || api.isServerHeld(previousServer.getServerInfo().getName())) {
                 continue;
             }
 

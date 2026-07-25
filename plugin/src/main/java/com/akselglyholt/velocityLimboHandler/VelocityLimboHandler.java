@@ -93,9 +93,8 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
 
         playerManager = new PlayerManager();
         api = new VelocityLimboApiImpl(server, this, playerManager);
-        playerManager.attachApi(api);
         commandBlocker = new CommandBlocker();
-        reconnectBlocker = new InMemoryReconnectBlocker(playerManager);
+        reconnectBlocker = new InMemoryReconnectBlocker(api);
 
         initializeMaintenanceIntegration();
     }
@@ -127,13 +126,15 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
             }
         }));
 
-        authManager = new AuthManager(this, proxyServer, reconnectBlocker);
-        reconnectHandler = new ReconnectHandler(playerManager, authManager, configManager, logger);
+        authManager = new AuthManager(this, proxyServer, reconnectBlocker, api);
+        reconnectHandler = new ReconnectHandler(playerManager, authManager, configManager, logger, api);
 
-        eventManger.register(this, new ConnectionListener());
+        eventManger.register(this, new ConnectionListener(api, playerManager));
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker, configManager));
 
-        proxyServer.getCommandManager().register(proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(), new VlhAdminCommand());
+        proxyServer.getCommandManager().register(
+                proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(),
+                new VlhAdminCommand(api));
 
         getLogger().info("Queue Enabled: " + configManager.isQueueEnabled());
 
@@ -168,10 +169,13 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
             return;
         }
 
-        reconnectionTask = proxyServer.getScheduler().buildTask(this, new ReconnectionTask(proxyServer, limboServer, playerManager, authManager, configManager, reconnectHandler)).repeat(configManager.getTaskInterval(), TimeUnit.MILLISECONDS).schedule();
+        reconnectionTask = proxyServer.getScheduler().buildTask(this,
+                new ReconnectionTask(proxyServer, limboServer, playerManager, authManager,
+                        configManager, reconnectHandler, api))
+                .repeat(configManager.getTaskInterval(), TimeUnit.MILLISECONDS).schedule();
 
         queueNotifierTask = proxyServer.getScheduler()
-                .buildTask(this, new QueueNotifierTask(proxyServer, limboServer, playerManager, configManager))
+                .buildTask(this, new QueueNotifierTask(proxyServer, limboServer, playerManager, configManager, api))
                 .repeat(1, TimeUnit.SECONDS)
                 .schedule();
     }
@@ -275,10 +279,6 @@ public class VelocityLimboHandler implements VelocityLimboApi.Provider {
     @Deprecated(forRemoval = false, since = API_V1_INTRODUCED_VERSION)
     public static ReconnectBlocker getReconnectBlocker() {
         return reconnectBlocker;
-    }
-
-    public static VelocityLimboApiImpl getApiImplementation() {
-        return api;
     }
 
     @Override
