@@ -10,6 +10,7 @@ import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
 import com.akselglyholt.velocityLimboHandler.managers.ReconnectHandler;
 import com.akselglyholt.velocityLimboHandler.misc.InMemoryReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
+import com.akselglyholt.velocityLimboHandler.misc.ReleaseVersionChecker;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.akselglyholt.velocityLimboHandler.tasks.QueueNotifierTask;
@@ -33,7 +34,6 @@ import org.bstats.velocity.Metrics;
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
@@ -97,6 +97,9 @@ public class VelocityLimboHandler {
     @Subscribe
     public void onInitialize(ProxyInitializeEvent event) {
         logger.info("Loading Limbo Handler!");
+        proxyServer.getScheduler()
+                .buildTask(this, () -> ReleaseVersionChecker.checkForUpdate(VersionInfo.VERSION, logger))
+                .schedule();
 
         EventManager eventManger = proxyServer.getEventManager();
 
