@@ -1,4 +1,4 @@
-file-version: 9
+file-version: 10
 
 # Server configs - These are settings you need to change!
 # The name of the limbo server in your velocity network
@@ -18,6 +18,10 @@ queue-notify-batch-size: 64 # Maximum due notifications sent per dispatcher tick
 
 # A list of disabled commands, which will not work inside the Limbo server. Recommended commands are ones that the player can use to transfer server, like /server or /hub
 disabled-commands: ["server", "lobby", "hub"]
+
+# A list of kick reasons that bypass the Limbo/reconnect flow entirely. If a player is kicked from a backend server with a reason containing any of these entries (case-insensitive), they are disconnected from the proxy instead of being sent to Limbo.
+# Useful for mods that intentionally disconnect players while keeping their character on the server, like Unplugged AFK ("Your player will be AFK")
+excluded-kick-reasons: [] # Default: []
 
 # Debug/information
 connection-warnings: false # Should connection failures/warnings be logged (Default: false)

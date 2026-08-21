@@ -7,6 +7,7 @@ import com.akselglyholt.velocityLimboHandler.commands.VlhAdminCommand;
 import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.listeners.CommandExecuteEventListener;
 import com.akselglyholt.velocityLimboHandler.listeners.ConnectionListener;
+import com.akselglyholt.velocityLimboHandler.listeners.KickListener;
 import com.akselglyholt.velocityLimboHandler.managers.ReconnectHandler;
 import com.akselglyholt.velocityLimboHandler.misc.InMemoryReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
@@ -128,6 +129,7 @@ public class VelocityLimboHandler {
         reconnectHandler = new ReconnectHandler(playerManager, authManager, configManager, logger);
 
         eventManger.register(this, new ConnectionListener());
+        eventManger.register(this, new KickListener());
         eventManger.register(this, new CommandExecuteEventListener(commandBlocker, configManager));
 
         proxyServer.getCommandManager().register(proxyServer.getCommandManager().metaBuilder("vlh").plugin(this).build(), new VlhAdminCommand());

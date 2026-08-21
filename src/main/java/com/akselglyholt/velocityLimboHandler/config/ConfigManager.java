@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.function.BiPredicate;
 import java.util.logging.Logger;
@@ -98,12 +99,20 @@ public class ConfigManager {
                         1, MAX_NOTIFY_BATCH_SIZE),
                 loadedConfig.getBoolean("queue-enabled", true),
                 List.copyOf(loadedConfig.getStringList("disabled-commands")),
+                normalizeExcludedKickReasons(loadedConfig.getStringList("excluded-kick-reasons")),
                 loadedConfig.getBoolean("connection-warnings", false),
                 loadedConfig.getBoolean("debug", false)
         );
 
         snapshot = freshSnapshot;
         MessageFormatter.clearCache();
+    }
+
+    private List<String> normalizeExcludedKickReasons(List<String> reasons) {
+        return reasons.stream()
+                .map(reason -> reason.trim().toLowerCase(Locale.ROOT))
+                .filter(reason -> !reason.isEmpty())
+                .toList();
     }
 
     private int bounded(String option, int value, int minimum, int maximum) {
@@ -191,6 +200,10 @@ public class ConfigManager {
         return current().disabledCommands();
     }
 
+    public List<String> getExcludedKickReasons() {
+        return current().excludedKickReasons();
+    }
+
     public boolean isConnectionWarningsEnabled() {
         return current().connectionWarnings();
     }
@@ -217,6 +230,7 @@ public class ConfigManager {
             int queueNotifyBatchSize,
             boolean queueEnabled,
             List<String> disabledCommands,
+            List<String> excludedKickReasons,
             boolean connectionWarnings,
             boolean debug
     ) {

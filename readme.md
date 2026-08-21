@@ -55,10 +55,17 @@ reconnect-batch-size: 8              # Maximum backend queues checked per proces
 queue-notify-interval: 30            # How often to tell players their position
 queue-notify-batch-size: 64          # Maximum due notifications sent per dispatcher tick
 disabled-commands: ["server","hub"]  # Commands blocked in limbo
+excluded-kick-reasons: []            # Kick reasons that bypass limbo/reconnect and disconnect the player instead
 ```
 
 The batch limits smooth work across scheduler ticks. Increase them for faster catch-up on very large
 networks, or lower them to cap short CPU bursts on constrained proxies.
+
+`excluded-kick-reasons` is matched case-insensitively against the kick reason a backend server sends.
+Players kicked with a matching reason are disconnected from the proxy normally instead of being caught
+by the limbo/reconnect flow — useful for mods like [Unplugged AFK](https://modrinth.com/mod/unplugged-afk)
+that intentionally disconnect players while keeping their character on the server
+(e.g. `excluded-kick-reasons: ["Your player will be AFK"]`).
 
 👉 Messages can be tweaked in `messages.yml` so your players see exactly what you want.
 

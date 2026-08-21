@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,7 +21,7 @@ class ConfigManagerTest {
         String publishedLimboName = configManager.getLimboName();
 
         Files.writeString(dataDirectory.resolve("config.yml"), """
-                file-version: 9
+                file-version: 10
                 limbo-name: missing
                 direct-connect-server: lobby
                 """);
@@ -29,5 +30,20 @@ class ConfigManagerTest {
                 (limboName, directConnectName) -> !"missing".equals(limboName)
         ));
         assertEquals(publishedLimboName, configManager.getLimboName());
+    }
+
+    @Test
+    void excludedKickReasonsAreNormalizedAndBlankEntriesDropped(@TempDir Path dataDirectory) throws IOException {
+        ConfigManager configManager = new ConfigManager(dataDirectory, Logger.getAnonymousLogger());
+        Files.writeString(dataDirectory.resolve("config.yml"), """
+                file-version: 10
+                limbo-name: limbo
+                direct-connect-server: lobby
+                excluded-kick-reasons: ["Your player will be AFK", "  ", "TIMEOUT"]
+                """);
+
+        configManager.load();
+
+        assertEquals(List.of("your player will be afk", "timeout"), configManager.getExcludedKickReasons());
     }
 }
