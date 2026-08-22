@@ -29,7 +29,7 @@ Made to work with [LOOHP's Limbo](https://github.com/LOOHP/Limbo) server, but an
 ## 🧩 Compatibility
 
 * 🖥️ **Proxy:** Velocity (all recent versions)
-* 🎮 **MC Versions:** 1.8 → 1.21+
+* 🎮 **MC Versions:** All versions
 * 📜 **License:** GPL-3.0
 
 ---
