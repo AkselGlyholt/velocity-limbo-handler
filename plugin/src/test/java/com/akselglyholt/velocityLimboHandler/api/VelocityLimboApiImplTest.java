@@ -14,6 +14,7 @@ import com.akselglyholt.velocitylimbohandler.api.events.ServerHoldChangedEvent;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseResult;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus;
+import com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome;
@@ -135,7 +136,7 @@ class VelocityLimboApiImplTest {
         assertEquals(HoldStatus.NOT_READY,
                 controller.holdServer("survival", new HoldRequest("deploy")).status());
         assertEquals(HoldReleaseResult.NOT_READY, controller.releaseHold(UUID.randomUUID()));
-        assertEquals(0, controller.releaseAllHolds());
+        assertEquals(ReleaseAllHoldsResult.Status.NOT_READY, controller.releaseAllHolds().status());
         assertEquals(RetargetResult.NOT_READY, controller.retargetPlayer(playerId, "survival"));
         assertEquals(EnterStatus.NOT_READY,
                 controller.enterLimbo(player, EnterRequest.destination("survival"))
@@ -347,7 +348,7 @@ class VelocityLimboApiImplTest {
         assertEquals(1, api.heldPlayerCount());
         verify(proxy.getScheduler(), times(1)).buildTask(any(), any(Runnable.class));
 
-        assertEquals(3, controller.releaseAllHolds());
+        assertEquals(3, controller.releaseAllHolds().releasedCount());
         assertEquals(0, api.heldServerCount());
         assertEquals(0, api.heldPlayerCount());
     }
@@ -366,7 +367,7 @@ class VelocityLimboApiImplTest {
             return null;
         }).when(eventManager).fireAndForget(isA(ServerHoldChangedEvent.class));
 
-        assertEquals(1, controller.releaseAllHolds());
+        assertEquals(1, controller.releaseAllHolds().releasedCount());
         assertEquals(0, api.heldServerCount());
     }
 
@@ -443,7 +444,7 @@ class VelocityLimboApiImplTest {
         }
 
         assertTrue(api.player(playerId).isEmpty());
-        assertEquals(0, controller.releaseAllHolds());
+        assertEquals(0, controller.releaseAllHolds().releasedCount());
     }
 
     @Test
@@ -473,8 +474,8 @@ class VelocityLimboApiImplTest {
 
         assertEquals(EnterStatus.CONNECTION_FAILURE, pending.toCompletableFuture().join().status());
         assertTrue(api.player(playerId).isEmpty());
-        assertEquals(0, enteringOwner.releaseAllHolds());
-        assertEquals(1, otherOwner.releaseAllHolds());
+        assertEquals(0, enteringOwner.releaseAllHolds().releasedCount());
+        assertEquals(1, otherOwner.releaseAllHolds().releasedCount());
     }
 
     @Test
@@ -853,7 +854,7 @@ class VelocityLimboApiImplTest {
         api.onPlayerDisconnected(player);
 
         assertTrue(api.player(playerId).isEmpty());
-        assertEquals(0, controller.releaseAllHolds());
+        assertEquals(0, controller.releaseAllHolds().releasedCount());
         verify(eventManager).fireAndForget(isA(PlayerLeftLimboEvent.class));
     }
 

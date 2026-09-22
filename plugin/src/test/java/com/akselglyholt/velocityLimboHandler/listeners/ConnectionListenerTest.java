@@ -254,7 +254,7 @@ class ConnectionListenerTest {
 
         connectionListener.onPlayerPostConnect(event);
 
-        verify(playerManager).addPlayer(player, previousServer);
+        verify(api).onPlayerArrived(player, "survival");
         verifyNoInteractions(proxyServer);
     }
     

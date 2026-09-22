@@ -95,88 +95,21 @@ failover-on-unexpected-server-disconnect = true
 
 ## 🔌 Developer API v1
 
-VLH exposes a Java 21 API for moving players into limbo atomically, applying owner-scoped
-player or server holds, retargeting managed players, reading immutable snapshots, and observing
-lifecycle events. The API is in-memory and intended for plugins running on the same Velocity proxy.
+Starting with VLH 2.0.0, an in-process Java 21 API is available to Velocity plugins. Add
+`velocity-limbo-handler-api` from JitPack as `compileOnly`/`provided`, use the same release tag as the
+installed plugin, and declare `velocity-limbo-handler` as a required Velocity dependency. Never
+shade or relocate the API.
 
-Consumer plugins must declare VLH as a required Velocity dependency:
-
-```java
-@Plugin(
-    id = "my-plugin",
-    dependencies = @Dependency(id = "velocity-limbo-handler")
-)
-public final class MyPlugin { }
-```
-
-Use the API artifact as `compileOnly`/`provided`. Do **not** shade or relocate it: the implementation
-and API classes are already embedded in the installed VLH plugin JAR.
-Replace `RELEASE_TAG` below with the GitHub release tag you install, including its leading `v`.
-
-### Gradle
-
-```kotlin
-repositories {
-    maven("https://jitpack.io")
-}
-
-dependencies {
-    compileOnly("com.github.AkselGlyholt.velocity-limbo-handler:velocity-limbo-handler-api:RELEASE_TAG")
-}
-```
-
-### Maven
-
-```xml
-<repository>
-  <id>jitpack.io</id>
-  <url>https://jitpack.io</url>
-</repository>
-
-<dependency>
-  <groupId>com.github.AkselGlyholt.velocity-limbo-handler</groupId>
-  <artifactId>velocity-limbo-handler-api</artifactId>
-  <version>RELEASE_TAG</version>
-  <scope>provided</scope>
-</dependency>
-```
-
-### Basic use
+Create your owner-scoped controller during or after `ProxyInitializeEvent`:
 
 ```java
-import com.akselglyholt.velocitylimbohandler.api.LimboController;
-import com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi;
-import com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest;
-import com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus;
-import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
-import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
-
 VelocityLimboApi api = VelocityLimboApi.get(proxyServer);
-// Run this during or after ProxyInitializeEvent; plugin instances are not registered in constructors.
 LimboController limbo = api.controllerFor(this);
-
-HoldResult deployHold = limbo.holdServer("survival", new HoldRequest("rolling deploy"));
-
-limbo.enterLimbo(player,
-        EnterRequest.currentServer().withInitialHold(new HoldRequest("awaiting profile")))
-    .thenAccept(result -> {
-        logger.info("Limbo entry: " + result.status());
-        if (result.status() == EnterStatus.SUCCESS) {
-            result.initialHold().ifPresent(lease ->
-                    logger.info("Release the initial hold when ready: " + lease.id()));
-        }
-    });
 ```
 
-The root API package contains only `VelocityLimboApi` and `LimboController`. Supporting contracts
-are grouped into the `entry`, `events`, `hold`, `lifecycle`, `player`, and `queue` subpackages.
-
-Each controller can release only its own opaque leases. Retain the initial lease ID returned by a
-successful atomic entry and pass it to `releaseHold` when that work is complete. The first player hold removes that player
-from the queue; releasing the final hold reevaluates permissions and appends them to the back of the
-appropriate `BYPASS`, `PRIORITY`, or `NORMAL` tier. Server holds preserve queue positions and block
-new attempts for everyone. Event objects are immutable and non-cancellable; query snapshots when
-you need current queue positions.
+The [Developer API v1 wiki guide](../../wiki/Developer-API-v1) contains dependency snippets,
+complete hold and release examples, result semantics, snapshots, event timing, threading rules, and
+compatibility guidance.
 
 ---
 

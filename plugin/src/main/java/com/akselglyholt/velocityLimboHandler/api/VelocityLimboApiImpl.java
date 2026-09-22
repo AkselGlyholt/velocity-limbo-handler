@@ -20,6 +20,7 @@ import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget;
+import com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome;
@@ -1019,8 +1020,10 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                     ? releaseLease(ownerId, leaseId) : HoldReleaseResult.NOT_READY;
         }
 
-        @Override public int releaseAllHolds() {
-            return availability == Availability.READY ? releaseAll(ownerId) : 0;
+        @Override public ReleaseAllHoldsResult releaseAllHolds() {
+            return availability == Availability.READY
+                    ? ReleaseAllHoldsResult.completed(releaseAll(ownerId))
+                    : ReleaseAllHoldsResult.notReady();
         }
 
         @Override public RetargetResult retargetPlayer(UUID playerId, String serverName) {

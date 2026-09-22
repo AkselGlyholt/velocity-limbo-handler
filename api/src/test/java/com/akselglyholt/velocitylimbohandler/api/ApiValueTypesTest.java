@@ -10,6 +10,7 @@ import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget;
+import com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase;
 import com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot;
 import com.akselglyholt.velocitylimbohandler.api.queue.QueueSnapshot;
@@ -84,11 +85,22 @@ class ApiValueTypesTest {
         HoldLease lease = UUID::randomUUID;
 
         assertSame(lease, HoldResult.acquired(lease).lease().orElseThrow());
-        assertFalse(HoldResult.failed(HoldStatus.UNKNOWN_SERVER).lease().isPresent());
+        assertFalse(HoldResult.failed(HoldStatus.INVALID_TARGET).lease().isPresent());
         assertThrows(IllegalArgumentException.class,
                 () -> new HoldResult(HoldStatus.ACQUIRED, Optional.empty()));
         assertThrows(IllegalArgumentException.class,
-                () -> new HoldResult(HoldStatus.UNKNOWN_SERVER, Optional.of(lease)));
+                () -> new HoldResult(HoldStatus.INVALID_TARGET, Optional.of(lease)));
+    }
+
+    @Test
+    void releaseAllResultsDistinguishNoHoldsFromUnavailable() {
+        assertEquals(ReleaseAllHoldsResult.Status.COMPLETED,
+                ReleaseAllHoldsResult.completed(0).status());
+        assertEquals(0, ReleaseAllHoldsResult.completed(0).releasedCount());
+        assertEquals(ReleaseAllHoldsResult.Status.NOT_READY,
+                ReleaseAllHoldsResult.notReady().status());
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReleaseAllHoldsResult(ReleaseAllHoldsResult.Status.NOT_READY, 1));
     }
 
     @Test

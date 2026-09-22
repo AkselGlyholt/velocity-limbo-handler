@@ -49,7 +49,7 @@ import java.util.logging.Logger;
         @Dependency(id = "maintenance", optional = true)
 })
 public class VelocityLimboHandler implements VelocityLimboApi.Provider {
-    private static final String API_V1_INTRODUCED_VERSION = "1.9.0";
+    private static final String API_V1_INTRODUCED_VERSION = "2.0.0";
     private static VelocityLimboHandler instance;
     private static ProxyServer proxyServer;
     private static final Logger logger = Logger.getLogger("Limbo Handler");

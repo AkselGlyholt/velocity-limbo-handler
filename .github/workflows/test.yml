@@ -30,7 +30,7 @@ jobs:
         cache: maven
 
     - name: Run reactor tests and install artifacts
-      run: mvn clean install -B
+      run: ./mvnw clean install -B
 
     - name: Verify the API boundary
       run: |
@@ -55,8 +55,9 @@ jobs:
           exit 1
         fi
         jar tf "$plugin_jar" | grep -q 'com/akselglyholt/velocitylimbohandler/api/VelocityLimboApi.class'
+        .github/scripts/check-api-signature.sh "$api_jar"
 
     - name: Compile an external API consumer
       run: |
-        vlh_version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-        mvn test -B -f .github/consumer-smoke/pom.xml -Dvlh.version="$vlh_version"
+        vlh_version=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+        ./mvnw test -B -f .github/consumer-smoke/pom.xml -Dvlh.version="$vlh_version"

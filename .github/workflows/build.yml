@@ -36,7 +36,7 @@ jobs:
             maven-${{ runner.os }}-
 
       - name: Build plugin with Maven
-        run: mvn clean package
+        run: ./mvnw clean package
 
       - name: Rename shaded JAR with build number
         run: |
