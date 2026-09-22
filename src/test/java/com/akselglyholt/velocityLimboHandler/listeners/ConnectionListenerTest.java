@@ -5,6 +5,7 @@ import com.akselglyholt.velocityLimboHandler.config.ConfigManager;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import com.velocitypowered.api.event.player.ServerPostConnectEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.proxy.Player;
@@ -123,6 +124,52 @@ class ConnectionListenerTest {
     }
 
     @Test
+    void testOnKickedFromServer_RedirectsCurrentBackendLossToLimbo() {
+        KickedFromServerEvent event = mock(KickedFromServerEvent.class);
+        Player player = mock(Player.class);
+        RegisteredServer survivalServer = mock(RegisteredServer.class);
+        ServerInfo survivalInfo = mock(ServerInfo.class);
+
+        when(event.getPlayer()).thenReturn(player);
+        when(event.getServer()).thenReturn(survivalServer);
+        when(event.kickedDuringServerConnect()).thenReturn(false);
+        when(player.isActive()).thenReturn(true);
+        when(survivalServer.getServerInfo()).thenReturn(survivalInfo);
+        when(survivalInfo.getName()).thenReturn("survival");
+
+        connectionListener.onKickedFromServer(event);
+
+        verify(event).setResult(argThat(result -> result instanceof KickedFromServerEvent.RedirectPlayer redirect
+                && redirect.getServer().equals(limboServer)));
+    }
+
+    @Test
+    void testOnKickedFromServer_DoesNotRedirectFailedServerSwitch() {
+        KickedFromServerEvent event = mock(KickedFromServerEvent.class);
+
+        when(event.kickedDuringServerConnect()).thenReturn(true);
+
+        connectionListener.onKickedFromServer(event);
+
+        verify(event, never()).setResult(any());
+    }
+
+    @Test
+    void testOnKickedFromServer_DoesNotRedirectWhenLimboDisconnects() {
+        KickedFromServerEvent event = mock(KickedFromServerEvent.class);
+        Player player = mock(Player.class);
+
+        when(event.getPlayer()).thenReturn(player);
+        when(event.getServer()).thenReturn(limboServer);
+        when(event.kickedDuringServerConnect()).thenReturn(false);
+        when(player.isActive()).thenReturn(true);
+
+        connectionListener.onKickedFromServer(event);
+
+        verify(event, never()).setResult(any());
+    }
+
+    @Test
     void testOnPlayerPostConnect_JoinedLimbo() {
         ServerPostConnectEvent event = mock(ServerPostConnectEvent.class);
         Player player = mock(Player.class);
@@ -140,6 +187,28 @@ class ConnectionListenerTest {
 
         // Should be added to player manager targeting directConnectServer (since no previous server and no virtual host)
         verify(playerManager).addPlayer(player, directConnectServer);
+    }
+
+    @Test
+    void testOnPlayerPostConnect_UsesPreviousServerBeforeForcedHost() {
+        ServerPostConnectEvent event = mock(ServerPostConnectEvent.class);
+        Player player = mock(Player.class);
+        ServerConnection serverConnection = mock(ServerConnection.class);
+        RegisteredServer previousServer = mock(RegisteredServer.class);
+        ServerInfo previousInfo = mock(ServerInfo.class);
+
+        when(event.getPlayer()).thenReturn(player);
+        when(player.getCurrentServer()).thenReturn(Optional.of(serverConnection));
+        when(serverConnection.getServer()).thenReturn(limboServer);
+        when(event.getPreviousServer()).thenReturn(previousServer);
+        when(previousServer.getServerInfo()).thenReturn(previousInfo);
+        when(previousInfo.getName()).thenReturn("survival");
+        when(player.getVirtualHost()).thenReturn(Optional.of(new InetSocketAddress("lobby.example.com", 25565)));
+
+        connectionListener.onPlayerPostConnect(event);
+
+        verify(playerManager).addPlayer(player, previousServer);
+        verifyNoInteractions(proxyServer);
     }
     
     @Test

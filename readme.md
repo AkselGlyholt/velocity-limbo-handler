@@ -68,8 +68,14 @@ networks, or lower them to cap short CPU bursts on constrained proxies.
 
 ```toml
 [servers]
-default = "lobby"
-limbo = "limbo"
+lobby = "127.0.0.1:25566"
+limbo = "127.0.0.1:25569"
+# Keep normal logins on Lobby. VLH intercepts a loss of the current backend itself.
+try = ["lobby", "limbo"]
+
+[advanced]
+# Required for VLH to recover players after an ungraceful backend disconnect.
+failover-on-unexpected-server-disconnect = true
 
 [forced-hosts]
 "pvp.example.com" = ["pvp", "limbo"]

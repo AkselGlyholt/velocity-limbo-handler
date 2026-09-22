@@ -4,6 +4,7 @@ import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import com.velocitypowered.api.event.player.ServerPostConnectEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.proxy.Player;
@@ -15,6 +16,25 @@ import java.net.InetSocketAddress;
 import java.util.List;
 
 public class ConnectionListener {
+
+    /**
+     * Recovers players who lose the backend they are currently on without affecting normal joins
+     * or failed server-switch attempts.
+     */
+    @Subscribe
+    public void onKickedFromServer(@NotNull KickedFromServerEvent event) {
+        RegisteredServer limbo = VelocityLimboHandler.getLimboServer();
+
+        if (event.kickedDuringServerConnect()
+                || !event.getPlayer().isActive()
+                || Utility.doServerNamesMatch(event.getServer(), limbo)) {
+            return;
+        }
+
+        event.setResult(KickedFromServerEvent.RedirectPlayer.create(limbo));
+        Utility.logDebug(() -> String.format("Redirecting %s to Limbo after losing %s",
+                event.getPlayer().getUsername(), event.getServer().getServerInfo().getName()));
+    }
 
     @Subscribe
     public void onPlayerPreConnect(@NotNull ServerPreConnectEvent event) {
@@ -70,9 +90,11 @@ public class ConnectionListener {
                     previousServer != null ? previousServer.getServerInfo().getName() : "none",
                     virtualHost != null ? virtualHost : "none"));
 
-            RegisteredServer intendedTarget = null;
+            // A backend loss has an authoritative recovery target. Forced hosts only determine
+            // where a player who joins the proxy without a previous backend should be queued.
+            RegisteredServer intendedTarget = previousServer;
 
-            if (virtualHost != null) {
+            if (intendedTarget == null && virtualHost != null) {
                 List<String> forcedServers = VelocityLimboHandler.getProxyServer()
                         .getConfiguration()
                         .getForcedHosts()
@@ -96,13 +118,9 @@ public class ConnectionListener {
                 }
             }
 
-            // Fallback to previous server or default
+            // Fallback to the direct-connect server when neither a previous server nor forced host exists.
             if (intendedTarget == null) {
-                if (previousServer != null) {
-                    intendedTarget = previousServer;
-                } else {
-                    intendedTarget = VelocityLimboHandler.getDirectConnectServer();
-                }
+                intendedTarget = VelocityLimboHandler.getDirectConnectServer();
                 RegisteredServer fallbackTarget = intendedTarget;
                 Utility.logDebug(() -> String.format("%s no forced-host target resolved — falling back to '%s'",
                         player.getUsername(), fallbackTarget.getServerInfo().getName()));
