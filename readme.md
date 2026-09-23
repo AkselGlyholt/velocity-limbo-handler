@@ -93,6 +93,26 @@ failover-on-unexpected-server-disconnect = true
 
 ---
 
+## 🔌 Developer API v1
+
+Starting with VLH 2.0.0, an in-process Java 21 API is available to Velocity plugins. Add
+`velocity-limbo-handler-api` from JitPack as `compileOnly`/`provided`, use the same release tag as the
+installed plugin, and declare `velocity-limbo-handler` as a required Velocity dependency. Never
+shade or relocate the API.
+
+Create your owner-scoped controller during or after `ProxyInitializeEvent`:
+
+```java
+VelocityLimboApi api = VelocityLimboApi.get(proxyServer);
+LimboController limbo = api.controllerFor(this);
+```
+
+The [Developer API v1 wiki guide](../../wiki/Developer-API-v1) contains dependency snippets,
+complete hold and release examples, result semantics, snapshots, event timing, threading rules, and
+compatibility guidance.
+
+---
+
 ## 🤝 Contributing
 
 Pull requests are welcome! Just follow the style already in place.

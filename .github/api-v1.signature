@@ -1,0 +1,298 @@
+Compiled from "LimboController.java"
+public interface com.akselglyholt.velocitylimbohandler.api.LimboController {
+  public abstract java.lang.String ownerId();
+  public abstract java.util.concurrent.CompletionStage<com.akselglyholt.velocitylimbohandler.api.entry.EnterResult> enterLimbo(com.velocitypowered.api.proxy.Player, com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest);
+  public abstract com.akselglyholt.velocitylimbohandler.api.hold.HoldResult holdPlayer(java.util.UUID, com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest);
+  public abstract com.akselglyholt.velocitylimbohandler.api.hold.HoldResult holdServer(java.lang.String, com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest);
+  public abstract com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus releaseHold(java.util.UUID);
+  public default com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus releaseHold(com.akselglyholt.velocitylimbohandler.api.hold.HoldLease);
+  public abstract com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult releaseAllHolds();
+  public abstract com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus retargetPlayer(java.util.UUID, java.lang.String);
+}
+Compiled from "VelocityLimboApi.java"
+public interface com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi {
+  public static final java.lang.String PLUGIN_ID = "velocity-limbo-handler";
+  public static com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi get(com.velocitypowered.api.proxy.ProxyServer);
+  public abstract com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability availability();
+  public abstract com.akselglyholt.velocitylimbohandler.api.LimboController controllerFor(java.lang.Object);
+  public abstract java.util.Optional<com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot> player(java.util.UUID);
+  public abstract com.akselglyholt.velocitylimbohandler.api.queue.QueueSnapshot queue(java.lang.String);
+  public abstract java.util.List<com.akselglyholt.velocitylimbohandler.api.queue.QueueSummary> queues();
+}
+Compiled from "VelocityLimboApi.java"
+public interface com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi$Provider {
+  public abstract com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi velocityLimboApi();
+}
+Compiled from "EnterRequest.java"
+public final class com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest {
+  public static com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest currentServer();
+  public static com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest destination(java.lang.String);
+  public com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest withInitialHold(com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest);
+  public java.util.Optional<java.lang.String> destination();
+  public java.util.Optional<com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest> initialHold();
+}
+Compiled from "EnterResult.java"
+public final class com.akselglyholt.velocitylimbohandler.api.entry.EnterResult extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.entry.EnterResult(com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus, java.util.Optional<com.akselglyholt.velocitylimbohandler.api.hold.HoldLease>);
+  public static com.akselglyholt.velocitylimbohandler.api.entry.EnterResult success(java.util.Optional<com.akselglyholt.velocitylimbohandler.api.hold.HoldLease>);
+  public static com.akselglyholt.velocitylimbohandler.api.entry.EnterResult failed(com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus status();
+  public java.util.Optional<com.akselglyholt.velocitylimbohandler.api.hold.HoldLease> initialHold();
+}
+Compiled from "EnterStatus.java"
+public final class com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus> {
+  public static final com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus SUCCESS;
+  public static final com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus NOT_READY;
+  public static final com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus INACTIVE_PLAYER;
+  public static final com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus ALREADY_MANAGED;
+  public static final com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus CONNECTION_IN_PROGRESS;
+  public static final com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus INVALID_TARGET;
+  public static final com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus UNKNOWN_SERVER;
+  public static final com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus CONNECTION_FAILURE;
+  public static com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.entry.EnterStatus valueOf(java.lang.String);
+}
+Compiled from "PlayerEnteredLimboEvent.java"
+public final class com.akselglyholt.velocitylimbohandler.api.events.PlayerEnteredLimboEvent extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.events.PlayerEnteredLimboEvent(com.velocitypowered.api.proxy.Player, com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public com.velocitypowered.api.proxy.Player player();
+  public com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot snapshot();
+}
+Compiled from "PlayerLeftLimboEvent.java"
+public final class com.akselglyholt.velocitylimbohandler.api.events.PlayerLeftLimboEvent extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.events.PlayerLeftLimboEvent(com.velocitypowered.api.proxy.Player, com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public com.velocitypowered.api.proxy.Player player();
+  public com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot snapshot();
+}
+Compiled from "PlayerLimboStateChangedEvent.java"
+public final class com.akselglyholt.velocitylimbohandler.api.events.PlayerLimboStateChangedEvent extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.events.PlayerLimboStateChangedEvent(com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot, com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot previous();
+  public com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot current();
+}
+Compiled from "PlayerReconnectAttemptEvent.java"
+public final class com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectAttemptEvent extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectAttemptEvent(com.velocitypowered.api.proxy.Player, com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public com.velocitypowered.api.proxy.Player player();
+  public com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot snapshot();
+}
+Compiled from "PlayerReconnectResultEvent.java"
+public final class com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectResultEvent extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectResultEvent(com.velocitypowered.api.proxy.Player, java.lang.String, com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome, java.util.Optional<java.lang.String>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public com.velocitypowered.api.proxy.Player player();
+  public java.lang.String destination();
+  public com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome outcome();
+  public java.util.Optional<java.lang.String> failure();
+}
+Compiled from "ServerHoldChangedEvent.java"
+public final class com.akselglyholt.velocitylimbohandler.api.events.ServerHoldChangedEvent extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.events.ServerHoldChangedEvent(java.lang.String, java.util.List<com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot>, long);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String serverName();
+  public java.util.List<com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot> holds();
+  public long revision();
+}
+Compiled from "HoldLease.java"
+public interface com.akselglyholt.velocitylimbohandler.api.hold.HoldLease {
+  public abstract java.util.UUID id();
+}
+Compiled from "HoldReleaseStatus.java"
+public final class com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus> {
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus RELEASED;
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus NOT_READY;
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus NOT_FOUND;
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus NOT_OWNER;
+  public static com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus valueOf(java.lang.String);
+}
+Compiled from "HoldRequest.java"
+public final class com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest(java.lang.String, java.util.Optional<java.time.Duration>);
+  public com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest(java.lang.String);
+  public com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest(java.lang.String, java.time.Duration);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String reason();
+  public java.util.Optional<java.time.Duration> duration();
+}
+Compiled from "HoldResult.java"
+public final class com.akselglyholt.velocitylimbohandler.api.hold.HoldResult extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.hold.HoldResult(com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus, java.util.Optional<com.akselglyholt.velocitylimbohandler.api.hold.HoldLease>);
+  public static com.akselglyholt.velocitylimbohandler.api.hold.HoldResult acquired(com.akselglyholt.velocitylimbohandler.api.hold.HoldLease);
+  public static com.akselglyholt.velocitylimbohandler.api.hold.HoldResult failed(com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus status();
+  public java.util.Optional<com.akselglyholt.velocitylimbohandler.api.hold.HoldLease> lease();
+}
+Compiled from "HoldSnapshot.java"
+public final class com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot(java.util.UUID, java.lang.String, com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget, java.lang.String, java.lang.String, java.time.Instant, java.util.Optional<java.time.Instant>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.util.UUID leaseId();
+  public java.lang.String ownerId();
+  public com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget targetType();
+  public java.lang.String target();
+  public java.lang.String reason();
+  public java.time.Instant acquiredAt();
+  public java.util.Optional<java.time.Instant> expiresAt();
+}
+Compiled from "HoldStatus.java"
+public final class com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus> {
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus ACQUIRED;
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus NOT_READY;
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus INACTIVE_OR_UNMANAGED_PLAYER;
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus CONNECTION_IN_PROGRESS;
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus INVALID_TARGET;
+  public static com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.hold.HoldStatus valueOf(java.lang.String);
+}
+Compiled from "HoldTarget.java"
+public final class com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget> {
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget PLAYER;
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget SERVER;
+  public static com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.hold.HoldTarget valueOf(java.lang.String);
+}
+Compiled from "ReleaseAllHoldsResult.java"
+public final class com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult(com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult$Status, int);
+  public static com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult completed(int);
+  public static com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult notReady();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult$Status status();
+  public int releasedCount();
+}
+Compiled from "ReleaseAllHoldsResult.java"
+public final class com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult$Status extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult$Status> {
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult$Status COMPLETED;
+  public static final com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult$Status NOT_READY;
+  public static com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult$Status[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult$Status valueOf(java.lang.String);
+}
+Compiled from "Availability.java"
+public final class com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability> {
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability STARTING;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability READY;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability STOPPING;
+  public static com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability valueOf(java.lang.String);
+}
+Compiled from "LimboPhase.java"
+public final class com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase> {
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase ENTERING;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase ADMITTING;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase WAITING;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase HELD;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase CONNECTING;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase CONNECTION_ISSUE;
+  public static com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase valueOf(java.lang.String);
+}
+Compiled from "ReconnectOutcome.java"
+public final class com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome> {
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome SUCCESS;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome CONNECTION_IN_PROGRESS;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome CONNECTION_CANCELLED;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome SERVER_DISCONNECTED;
+  public static final com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome CONNECTION_FAILURE;
+  public static com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome valueOf(java.lang.String);
+}
+Compiled from "ManagedPlayerSnapshot.java"
+public final class com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot(java.util.UUID, java.lang.String, com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase, java.lang.String, java.util.OptionalInt, java.util.Optional<com.akselglyholt.velocitylimbohandler.api.queue.QueueTier>, java.util.Optional<java.lang.String>, java.util.List<com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot>, java.util.List<com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot>, long);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.util.UUID playerId();
+  public java.lang.String username();
+  public com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase phase();
+  public java.lang.String destination();
+  public java.util.OptionalInt position();
+  public java.util.Optional<com.akselglyholt.velocitylimbohandler.api.queue.QueueTier> tier();
+  public java.util.Optional<java.lang.String> connectionIssue();
+  public java.util.List<com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot> playerHolds();
+  public java.util.List<com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot> serverHolds();
+  public long revision();
+}
+Compiled from "RetargetStatus.java"
+public final class com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus> {
+  public static final com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus SUCCESS;
+  public static final com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus NOT_READY;
+  public static final com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus INACTIVE_OR_UNMANAGED_PLAYER;
+  public static final com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus CONNECTION_IN_PROGRESS;
+  public static final com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus INVALID_TARGET;
+  public static final com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus UNKNOWN_SERVER;
+  public static com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus valueOf(java.lang.String);
+}
+Compiled from "QueueSnapshot.java"
+public final class com.akselglyholt.velocitylimbohandler.api.queue.QueueSnapshot extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.queue.QueueSnapshot(java.lang.String, java.util.List<com.akselglyholt.velocitylimbohandler.api.queue.QueuedPlayerSnapshot>, java.util.List<com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot>, long);
+  public boolean serverHeld();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String destination();
+  public java.util.List<com.akselglyholt.velocitylimbohandler.api.queue.QueuedPlayerSnapshot> players();
+  public java.util.List<com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot> serverHolds();
+  public long revision();
+}
+Compiled from "QueueSummary.java"
+public final class com.akselglyholt.velocitylimbohandler.api.queue.QueueSummary extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.queue.QueueSummary(java.lang.String, int, java.util.Map<com.akselglyholt.velocitylimbohandler.api.queue.QueueTier, java.lang.Integer>, boolean, long);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String destination();
+  public int size();
+  public java.util.Map<com.akselglyholt.velocitylimbohandler.api.queue.QueueTier, java.lang.Integer> tierCounts();
+  public boolean serverHeld();
+  public long revision();
+}
+Compiled from "QueueTier.java"
+public final class com.akselglyholt.velocitylimbohandler.api.queue.QueueTier extends java.lang.Enum<com.akselglyholt.velocitylimbohandler.api.queue.QueueTier> {
+  public static final com.akselglyholt.velocitylimbohandler.api.queue.QueueTier BYPASS;
+  public static final com.akselglyholt.velocitylimbohandler.api.queue.QueueTier PRIORITY;
+  public static final com.akselglyholt.velocitylimbohandler.api.queue.QueueTier NORMAL;
+  public static com.akselglyholt.velocitylimbohandler.api.queue.QueueTier[] values();
+  public static com.akselglyholt.velocitylimbohandler.api.queue.QueueTier valueOf(java.lang.String);
+}
+Compiled from "QueuedPlayerSnapshot.java"
+public final class com.akselglyholt.velocitylimbohandler.api.queue.QueuedPlayerSnapshot extends java.lang.Record {
+  public com.akselglyholt.velocitylimbohandler.api.queue.QueuedPlayerSnapshot(java.util.UUID, java.lang.String, int, com.akselglyholt.velocitylimbohandler.api.queue.QueueTier);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.util.UUID playerId();
+  public java.lang.String username();
+  public int position();
+  public com.akselglyholt.velocitylimbohandler.api.queue.QueueTier tier();
+}
