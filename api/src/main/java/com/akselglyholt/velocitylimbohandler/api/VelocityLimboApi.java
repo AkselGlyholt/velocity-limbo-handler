@@ -15,9 +15,14 @@ import java.util.UUID;
 /**
  * Stable v1 API exposed by the Velocity Limbo Handler plugin instance.
  *
- * <p>Read methods return immutable point-in-time snapshots. Compare their revisions before combining
- * independently obtained state. API events are immutable observations and, except for the documented
- * limbo-entry admission barrier, are dispatched without waiting for consumers.</p>
+ * <p>Read methods return immutable point-in-time snapshots. API events are immutable observations and,
+ * except for the documented limbo-entry admission barrier, are dispatched without waiting for
+ * consumers and without a delivery order.</p>
+ *
+ * <p>Snapshots and events carry a {@code revision} from one proxy-wide counter that only increases.
+ * Use it to discard stale data: ignore a {@code PlayerLimboStateChangedEvent} whose
+ * {@code current().revision()} is not greater than the last revision you processed for that player,
+ * and likewise per server for {@code ServerHoldChangedEvent}.</p>
  */
 public interface VelocityLimboApi {
     String PLUGIN_ID = "velocity-limbo-handler";

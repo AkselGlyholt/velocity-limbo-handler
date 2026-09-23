@@ -2,7 +2,7 @@ package example;
 
 import com.akselglyholt.velocitylimbohandler.api.LimboController;
 import com.akselglyholt.velocitylimbohandler.api.VelocityLimboApi;
-import com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseResult;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
 import com.google.inject.Inject;
@@ -41,7 +41,7 @@ public final class ConsumerPlugin {
         );
     }
 
-    public HoldReleaseResult resume(UUID leaseId) {
+    public HoldReleaseStatus resume(UUID leaseId) {
         if (controller == null) {
             throw new IllegalStateException("VLH controller is not available before proxy initialization");
         }

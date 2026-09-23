@@ -12,7 +12,7 @@ import java.util.UUID;
 
 /**
  * Immutable view of all public state for a managed player.
- * {@code revision} identifies the API-managed state observed while constructing this snapshot.
+ * {@code revision} orders this snapshot against other snapshots and events; a higher value is newer.
  * {@code position} and {@code tier} are present only while the player is in a queue.
  * {@code connectionIssue} is present only when VLH has recorded a blocking connection issue.
  */

@@ -7,7 +7,7 @@ import java.util.Objects;
 
 /**
  * Immutable ordered view of one destination queue.
- * {@code revision} identifies the API-managed state observed while constructing this snapshot.
+ * {@code revision} orders this snapshot against other snapshots and events; a higher value is newer.
  */
 public record QueueSnapshot(String destination, List<QueuedPlayerSnapshot> players,
                             List<HoldSnapshot> serverHolds, long revision) {

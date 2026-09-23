@@ -1,7 +1,7 @@
 package com.akselglyholt.velocitylimbohandler.api.hold;
 
 /** Result of releasing a hold through an owner-scoped controller. */
-public enum HoldReleaseResult {
+public enum HoldReleaseStatus {
     /** The lease existed, belonged to this controller, and was released. */
     RELEASED,
     /** VLH is still starting or is stopping. */

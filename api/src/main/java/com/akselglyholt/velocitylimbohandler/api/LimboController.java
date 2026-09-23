@@ -2,22 +2,25 @@ package com.akselglyholt.velocitylimbohandler.api;
 
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterRequest;
 import com.akselglyholt.velocitylimbohandler.api.entry.EnterResult;
-import com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseResult;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldLease;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
 import com.akselglyholt.velocitylimbohandler.api.hold.ReleaseAllHoldsResult;
-import com.akselglyholt.velocitylimbohandler.api.player.RetargetResult;
+import com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus;
 import com.velocitypowered.api.proxy.Player;
 
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 
 /**
  * Owner-scoped mutation surface for one loaded Velocity plugin.
  *
- * <p>Operational failures are returned as typed results. Argument validation failures still throw
- * the documented runtime exceptions. Methods may be called from Velocity event handlers or
- * scheduler tasks. No callback or API event is guaranteed to run on a particular thread.</p>
+ * <p>Operational failures are returned as typed values: a {@code *Status} enum when the operation has
+ * no payload, or a {@code *Result} record pairing a status with its payload. Argument validation
+ * failures still throw the documented runtime exceptions. Methods may be called from Velocity event
+ * handlers or scheduler tasks. No callback or API event is guaranteed to run on a particular thread.</p>
  */
 public interface LimboController {
     /** Returns the Velocity plugin ID that owns this controller and every lease it creates. */
@@ -62,11 +65,22 @@ public interface LimboController {
     /**
      * Releases one lease. A controller cannot release a lease owned by another plugin.
      *
-     * @param leaseId opaque lease ID returned by a successful hold
+     * @param leaseId opaque lease ID from a {@link HoldLease} or this owner's {@code HoldSnapshot}
      * @return release result
      * @throws NullPointerException when {@code leaseId} is {@code null}
      */
-    HoldReleaseResult releaseHold(UUID leaseId);
+    HoldReleaseStatus releaseHold(UUID leaseId);
+
+    /**
+     * Releases a lease returned by this controller, e.g. {@code result.lease().ifPresent(limbo::releaseHold)}.
+     *
+     * @param lease lease returned by a successful hold
+     * @return release result
+     * @throws NullPointerException when {@code lease} is {@code null}
+     */
+    default HoldReleaseStatus releaseHold(HoldLease lease) {
+        return releaseHold(Objects.requireNonNull(lease, "lease").id());
+    }
 
     /** Releases every player and server hold owned by this controller. */
     ReleaseAllHoldsResult releaseAllHolds();
@@ -80,5 +94,5 @@ public interface LimboController {
      * @return retarget result
      * @throws NullPointerException when an argument is {@code null}
      */
-    RetargetResult retargetPlayer(UUID playerId, String serverName);
+    RetargetStatus retargetPlayer(UUID playerId, String serverName);
 }

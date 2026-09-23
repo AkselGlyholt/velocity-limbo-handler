@@ -69,11 +69,14 @@ public class PlayerManager {
 
         if (VelocityLimboHandler.isQueueEnabled()) {
             reconnectQueueState.enqueue(player, serverName);
-            player.sendMessage(MessageFormatter.formatComponent(queuePositionMsg, player));
+            sendQueuePositionMessage(player);
         }
     }
 
-    /** Registers arrival without admitting to the queue; API event handlers run between these operations. */
+    /**
+     * Registers arrival without admitting to the queue; API event handlers run between these operations.
+     * Does not message the player, so callers can send {@link #sendWelcomeMessage} outside their locks.
+     */
     public void registerPlayerInLimbo(Player player, RegisteredServer registeredServer) {
         registerPlayerInLimboByName(player, registeredServer.getServerInfo().getName());
     }
@@ -83,19 +86,28 @@ public class PlayerManager {
         connectionState.registerPlayer(playerId, serverName);
         Utility.logDebug(() -> String.format("%s joined limbo — destination %s",
                 player.getUsername(), serverName));
+    }
+
+    /**
+     * Appends a player to their freshly evaluated permission tier when queueing is enabled. Returns
+     * whether the player was queued; callers send {@link #sendQueuePositionMessage} outside their locks.
+     */
+    public boolean admitPlayerByName(Player player, String serverName) {
+        connectionState.registerPlayer(player.getUniqueId(), serverName);
+        if (!VelocityLimboHandler.isQueueEnabled()) return false;
+        reconnectQueueState.enqueue(player, serverName);
+        return true;
+    }
+
+    public void sendWelcomeMessage(Player player) {
         Utility.sendWelcomeMessage(player, null);
     }
 
-    /** Appends a player to their freshly evaluated permission tier when queueing is enabled. */
-    public void admitPlayer(Player player, RegisteredServer registeredServer) {
-        admitPlayerByName(player, registeredServer.getServerInfo().getName());
-    }
-
-    public void admitPlayerByName(Player player, String serverName) {
-        connectionState.registerPlayer(player.getUniqueId(), serverName);
-        if (VelocityLimboHandler.isQueueEnabled()) {
-            reconnectQueueState.enqueue(player, serverName);
-            player.sendMessage(MessageFormatter.formatComponent(queuePositionMsg, player));
+    /** Tells a queued player their position; skipped once they have already left the queue. */
+    public void sendQueuePositionMessage(Player player) {
+        int position = getQueuePosition(player);
+        if (position > 0) {
+            player.sendMessage(MessageFormatter.formatComponent(queuePositionMsg, player, position, null));
         }
     }
 

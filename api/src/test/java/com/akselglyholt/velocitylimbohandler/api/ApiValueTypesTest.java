@@ -105,7 +105,7 @@ class ApiValueTypesTest {
 
     @Test
     void collectionBearingContractsDefensivelyCopyInputs() {
-        HoldSnapshot hold = holdSnapshot(1);
+        HoldSnapshot hold = holdSnapshot();
         List<HoldSnapshot> playerHolds = new ArrayList<>(List.of(hold));
         List<HoldSnapshot> serverHolds = new ArrayList<>(List.of(hold));
         ManagedPlayerSnapshot player = new ManagedPlayerSnapshot(UUID.randomUUID(), "Tester", LimboPhase.HELD,
@@ -136,9 +136,7 @@ class ApiValueTypesTest {
         UUID playerId = UUID.randomUUID();
 
         assertThrows(IllegalArgumentException.class,
-                () -> new QueuedPlayerSnapshot(playerId, "Tester", 0, QueueTier.NORMAL, 0));
-        assertThrows(IllegalArgumentException.class,
-                () -> new QueuedPlayerSnapshot(playerId, "Tester", 1, QueueTier.NORMAL, -1));
+                () -> new QueuedPlayerSnapshot(playerId, "Tester", 0, QueueTier.NORMAL));
         assertThrows(IllegalArgumentException.class,
                 () -> new QueueSnapshot("survival", List.of(), List.of(), -1));
         assertThrows(IllegalArgumentException.class,
@@ -148,11 +146,10 @@ class ApiValueTypesTest {
                         OptionalInt.empty(), Optional.empty(), Optional.empty(), List.of(), List.of(), -1));
         assertThrows(IllegalArgumentException.class,
                 () -> new ServerHoldChangedEvent("survival", List.of(), -1));
-        assertThrows(IllegalArgumentException.class, () -> holdSnapshot(-1));
     }
 
-    private HoldSnapshot holdSnapshot(long revision) {
+    private HoldSnapshot holdSnapshot() {
         return new HoldSnapshot(UUID.randomUUID(), "owner", HoldTarget.SERVER, "survival", "deploy",
-                Instant.now(), Optional.empty(), revision);
+                Instant.now(), Optional.empty());
     }
 }

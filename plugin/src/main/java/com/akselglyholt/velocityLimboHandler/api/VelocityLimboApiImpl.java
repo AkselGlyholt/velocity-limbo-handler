@@ -14,7 +14,7 @@ import com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectAttemptEv
 import com.akselglyholt.velocitylimbohandler.api.events.PlayerReconnectResultEvent;
 import com.akselglyholt.velocitylimbohandler.api.events.ServerHoldChangedEvent;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldLease;
-import com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseResult;
+import com.akselglyholt.velocitylimbohandler.api.hold.HoldReleaseStatus;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldRequest;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldResult;
 import com.akselglyholt.velocitylimbohandler.api.hold.HoldSnapshot;
@@ -25,7 +25,7 @@ import com.akselglyholt.velocitylimbohandler.api.lifecycle.Availability;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.LimboPhase;
 import com.akselglyholt.velocitylimbohandler.api.lifecycle.ReconnectOutcome;
 import com.akselglyholt.velocitylimbohandler.api.player.ManagedPlayerSnapshot;
-import com.akselglyholt.velocitylimbohandler.api.player.RetargetResult;
+import com.akselglyholt.velocitylimbohandler.api.player.RetargetStatus;
 import com.akselglyholt.velocitylimbohandler.api.queue.QueueSnapshot;
 import com.akselglyholt.velocitylimbohandler.api.queue.QueueSummary;
 import com.akselglyholt.velocitylimbohandler.api.queue.QueueTier;
@@ -203,6 +203,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             playerManager.registerPlayerInLimboByName(player, destination);
             entered = snapshotLocked(player.getUniqueId());
         }
+        playerManager.sendWelcomeMessage(player);
 
         CompletableFuture<PlayerEnteredLimboEvent> barrier;
         try {
@@ -251,6 +252,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         expireDueLeases();
         ManagedPlayerSnapshot before;
         ManagedPlayerSnapshot after;
+        boolean queued = false;
         synchronized (lock) {
             ManagedState state = players.get(player.getUniqueId());
             if (state == null || state.player != player
@@ -266,13 +268,14 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             } else if (issue) {
                 state.phase = LimboPhase.CONNECTION_ISSUE;
             } else {
-                playerManager.admitPlayerByName(player, state.destination);
+                queued = playerManager.admitPlayerByName(player, state.destination);
                 state.phase = LimboPhase.WAITING;
             }
             revision++;
             after = snapshotLocked(player.getUniqueId());
         }
         publishTransition(before, after);
+        if (queued) playerManager.sendQueuePositionMessage(player);
     }
 
     public void onPlayerLeft(Player player, RegisteredServer connectedServer) {
@@ -416,6 +419,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     public void setConnectionIssue(Player player, String issue) {
         ManagedPlayerSnapshot before;
         ManagedPlayerSnapshot after;
+        boolean queued = false;
         synchronized (lock) {
             ManagedState state = players.get(player.getUniqueId());
             if (state == null || state.player != player) return;
@@ -432,7 +436,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                 state.phase = LimboPhase.HELD;
             } else if (issue == null && state.phase != LimboPhase.CONNECTING) {
                 if (recovering) {
-                    playerManager.admitPlayerByName(player, state.destination);
+                    queued = playerManager.admitPlayerByName(player, state.destination);
                 }
                 state.phase = LimboPhase.WAITING;
             }
@@ -440,6 +444,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             after = snapshotLocked(player.getUniqueId());
         }
         publishTransition(before, after);
+        if (queued) playerManager.sendQueuePositionMessage(player);
     }
 
     public boolean isConnectionClaimed(Player player) {
@@ -540,51 +545,56 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         return HoldResult.acquired(new LeaseHandle(lease.id));
     }
 
-    private HoldReleaseResult releaseLease(String ownerId, UUID leaseId) {
+    private HoldReleaseStatus releaseLease(String ownerId, UUID leaseId) {
         expireDueLeases();
         LeaseRecord lease;
         ManagedPlayerSnapshot before = null;
         ManagedPlayerSnapshot after = null;
         List<HoldSnapshot> serverHolds = null;
+        Player queued = null;
         long eventRevision = 0;
         synchronized (lock) {
             lease = leases.get(leaseId);
-            if (lease == null) return HoldReleaseResult.NOT_FOUND;
-            if (!lease.ownerId.equals(ownerId)) return HoldReleaseResult.NOT_OWNER;
+            if (lease == null) return HoldReleaseStatus.NOT_FOUND;
+            if (!lease.ownerId.equals(ownerId)) return HoldReleaseStatus.NOT_OWNER;
             UUID playerId = lease.targetType == HoldTarget.PLAYER ? UUID.fromString(lease.target) : null;
             if (playerId != null) before = snapshotLocked(playerId);
             removeLeaseLocked(leaseId);
             eventRevision = ++revision;
             if (playerId != null) {
-                after = resumeAfterFinalHoldLocked(playerId);
+                queued = resumeAfterFinalHoldLocked(playerId);
+                after = snapshotLocked(playerId);
             } else {
                 serverHolds = serverHoldsLocked(lease.target);
             }
         }
         logLease("released", lease);
         if (before != null && after != null) publishTransition(before, after);
+        if (queued != null) playerManager.sendQueuePositionMessage(queued);
         if (serverHolds != null) {
             proxy.getEventManager().fireAndForget(new ServerHoldChangedEvent(lease.target, serverHolds, eventRevision));
         }
-        return HoldReleaseResult.RELEASED;
+        return HoldReleaseStatus.RELEASED;
     }
 
-    private ManagedPlayerSnapshot resumeAfterFinalHoldLocked(UUID playerId) {
-        if (hasPlayerHoldsLocked(playerId)) return snapshotLocked(playerId);
+    /** Resumes a player whose final hold ended; returns the player when they were queued, else null. */
+    private Player resumeAfterFinalHoldLocked(UUID playerId) {
+        if (hasPlayerHoldsLocked(playerId)) return null;
         ManagedState state = players.get(playerId);
         Player player = proxy.getPlayer(playerId).filter(Player::isActive).orElse(null);
         if (state == null || player == null || state.phase == LimboPhase.CONNECTING
                 || state.phase == LimboPhase.ENTERING || state.phase == LimboPhase.ADMITTING) {
-            return snapshotLocked(playerId);
+            return null;
         }
+        boolean queued = false;
         if (playerManager.hasConnectionIssue(player)) {
             state.phase = LimboPhase.CONNECTION_ISSUE;
         } else {
-            playerManager.admitPlayerByName(player, state.destination);
+            queued = playerManager.admitPlayerByName(player, state.destination);
             state.phase = LimboPhase.WAITING;
         }
         revision++;
-        return snapshotLocked(playerId);
+        return queued ? player : null;
     }
 
     private int releaseAll(String ownerId) {
@@ -595,22 +605,22 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         }
         int released = 0;
         for (UUID id : ids) {
-            if (releaseLease(ownerId, id) == HoldReleaseResult.RELEASED) released++;
+            if (releaseLease(ownerId, id) == HoldReleaseStatus.RELEASED) released++;
         }
         return released;
     }
 
-    private RetargetResult retarget(UUID playerId, String requestedName) {
+    private RetargetStatus retarget(UUID playerId, String requestedName) {
         expireDueLeases();
         String serverName;
         try {
             serverName = requireServerName(requestedName);
         } catch (IllegalArgumentException exception) {
-            return RetargetResult.INVALID_TARGET;
+            return RetargetStatus.INVALID_TARGET;
         }
         RegisteredServer server = proxy.getServer(serverName).orElse(null);
-        if (server == null) return RetargetResult.UNKNOWN_SERVER;
-        if (isLimboServer(serverName)) return RetargetResult.INVALID_TARGET;
+        if (server == null) return RetargetStatus.UNKNOWN_SERVER;
+        if (isLimboServer(serverName)) return RetargetStatus.INVALID_TARGET;
 
         ManagedPlayerSnapshot before;
         ManagedPlayerSnapshot after;
@@ -618,9 +628,9 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             ManagedState state = players.get(playerId);
             Player player = proxy.getPlayer(playerId).filter(Player::isActive).orElse(null);
             if (state == null || player == null || state.player != player) {
-                return RetargetResult.INACTIVE_OR_UNMANAGED_PLAYER;
+                return RetargetStatus.INACTIVE_OR_UNMANAGED_PLAYER;
             }
-            if (state.phase == LimboPhase.CONNECTING) return RetargetResult.CONNECTION_IN_PROGRESS;
+            if (state.phase == LimboPhase.CONNECTING) return RetargetStatus.CONNECTION_IN_PROGRESS;
             before = snapshotLocked(playerId);
             state.destination = server.getServerInfo().getName();
             entryIntents.computeIfPresent(playerId, (ignored, intent) ->
@@ -632,7 +642,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             after = snapshotLocked(playerId);
         }
         publishTransition(before, after);
-        return RetargetResult.SUCCESS;
+        return RetargetStatus.SUCCESS;
     }
 
     private CompletionStage<EnterResult> enter(String ownerId, Player player, EnterRequest request) {
@@ -757,7 +767,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             int position = 1;
             for (PlayerManager.QueuedPlayer queued : queue) {
                 entries.add(new QueuedPlayerSnapshot(queued.uuid(), queued.name(), position++,
-                        apiTier(queued.tier()), snapshotRevision));
+                        apiTier(queued.tier())));
             }
         }
         return new QueueSnapshot(canonicalServerName(serverName), entries, serverHolds, snapshotRevision);
@@ -802,7 +812,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private LeaseRecord newLease(String ownerId, HoldTarget targetType, String target, HoldRequest request) {
         Instant acquired = clock.instant();
         return new LeaseRecord(UUID.randomUUID(), ownerId, targetType, target, request.reason(), acquired,
-                request.duration().map(acquired::plus), ++revision);
+                request.duration().map(acquired::plus));
     }
 
     private void addLeaseLocked(LeaseRecord lease) {
@@ -874,6 +884,7 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         for (ExpiredLeaseResult result : expired) {
             logLease("expired", result.lease);
             if (result.before != null && result.after != null) publishTransition(result.before, result.after);
+            if (result.queued != null) playerManager.sendQueuePositionMessage(result.queued);
             if (result.serverHolds != null) {
                 proxy.getEventManager().fireAndForget(new ServerHoldChangedEvent(
                         result.lease.target, result.serverHolds, result.eventRevision));
@@ -891,9 +902,10 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         ManagedPlayerSnapshot before = playerId == null ? null : snapshotLocked(playerId);
         removeLeaseIndexesLocked(lease);
         long eventRevision = ++revision;
-        ManagedPlayerSnapshot after = playerId == null ? null : resumeAfterFinalHoldLocked(playerId);
+        Player queued = playerId == null ? null : resumeAfterFinalHoldLocked(playerId);
+        ManagedPlayerSnapshot after = playerId == null ? null : snapshotLocked(playerId);
         List<HoldSnapshot> holds = playerId == null ? serverHoldsLocked(lease.target) : null;
-        return new ExpiredLeaseResult(lease, before, after, holds, eventRevision);
+        return new ExpiredLeaseResult(lease, before, after, queued, holds, eventRevision);
     }
 
     private void removeLeaseLocked(UUID leaseId) {
@@ -1014,10 +1026,10 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                     ? acquireServerHold(ownerId, serverName, request) : HoldResult.failed(HoldStatus.NOT_READY);
         }
 
-        @Override public HoldReleaseResult releaseHold(UUID leaseId) {
+        @Override public HoldReleaseStatus releaseHold(UUID leaseId) {
             Objects.requireNonNull(leaseId, "leaseId");
             return availability == Availability.READY
-                    ? releaseLease(ownerId, leaseId) : HoldReleaseResult.NOT_READY;
+                    ? releaseLease(ownerId, leaseId) : HoldReleaseStatus.NOT_READY;
         }
 
         @Override public ReleaseAllHoldsResult releaseAllHolds() {
@@ -1026,10 +1038,10 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                     : ReleaseAllHoldsResult.notReady();
         }
 
-        @Override public RetargetResult retargetPlayer(UUID playerId, String serverName) {
+        @Override public RetargetStatus retargetPlayer(UUID playerId, String serverName) {
             Objects.requireNonNull(playerId, "playerId");
             Objects.requireNonNull(serverName, "serverName");
-            return availability == Availability.READY ? retarget(playerId, serverName) : RetargetResult.NOT_READY;
+            return availability == Availability.READY ? retarget(playerId, serverName) : RetargetStatus.NOT_READY;
         }
     }
 
@@ -1050,13 +1062,13 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
     private record LeaseHandle(UUID id) implements HoldLease { }
 
     private record ExpiredLeaseResult(LeaseRecord lease, ManagedPlayerSnapshot before,
-                                      ManagedPlayerSnapshot after, List<HoldSnapshot> serverHolds,
-                                      long eventRevision) { }
+                                      ManagedPlayerSnapshot after, Player queued,
+                                      List<HoldSnapshot> serverHolds, long eventRevision) { }
 
     private record LeaseRecord(UUID id, String ownerId, HoldTarget targetType, String target, String reason,
-                               Instant acquiredAt, Optional<Instant> expiresAt, long revision) {
+                               Instant acquiredAt, Optional<Instant> expiresAt) {
         private HoldSnapshot snapshot() {
-            return new HoldSnapshot(id, ownerId, targetType, target, reason, acquiredAt, expiresAt, revision);
+            return new HoldSnapshot(id, ownerId, targetType, target, reason, acquiredAt, expiresAt);
         }
     }
 }

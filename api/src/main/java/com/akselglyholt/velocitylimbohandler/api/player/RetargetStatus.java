@@ -1,7 +1,7 @@
 package com.akselglyholt.velocitylimbohandler.api.player;
 
 /** Result of changing a managed player's destination. */
-public enum RetargetResult {
+public enum RetargetStatus {
     /** The destination was changed. */
     SUCCESS,
     /** VLH is still starting or is stopping. */
