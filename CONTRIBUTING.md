@@ -5,15 +5,38 @@ email, or any other method with the owners of this repository before making a ch
 
 Please note we have a code of conduct, please follow it in all your interactions with the project.
 
+## Local setup
+
+Requirements:
+
+- Git
+- Java 21 or newer
+
+The Maven wrapper downloads the supported Maven version automatically:
+
+```bash
+./mvnw clean verify
+```
+
+The reactor builds two modules:
+
+- `api`: public contracts and their sources/Javadocs
+- `plugin`: the installable Velocity plugin with the API embedded
+
+The plugin JAR is written to `plugin/target`. For a manual integration test, install that JAR on a
+non-production Velocity proxy configured with a limbo server and at least one backend. The
+[developer wiki](https://github.com/AkselGlyholt/velocity-limbo-handler/wiki/Developers) describes
+the module layout, test commands, and manual test scenarios.
+
+When changing the public API, update its Javadocs, wiki guide, consumer smoke test, and checked-in
+API signature in the same pull request. Run `./mvnw clean verify` before opening the PR.
+
 ## Pull Request Process
 
-1. Ensure any install or build dependencies are removed before the end of the layer when doing a 
-   build.
-2. Update the README.md with details of changes to the interface, this includes new environment 
-   variables, exposed ports, useful file locations and container parameters.
-3. Increase the version numbers in any examples files and the README.md to the new version that this
-   Pull Request would represent. The versioning scheme we use is [SemVer](http://semver.org/).
-4. You may merge the Pull Request in once you have the sign-off of two other developers, or if you 
+1. Keep changes focused and include tests for behavior that can regress.
+2. Update user or developer documentation when behavior or public contracts change.
+3. Follow [semantic versioning](https://semver.org/) for public API changes.
+4. You may merge the Pull Request once you have the sign-off of two other developers, or if you
    do not have permission to do that, you may request the second reviewer to merge it for you.
 
 ## Code of Conduct
