@@ -776,6 +776,30 @@ class VelocityLimboApiImplTest {
     }
 
     @Test
+    void queueSnapshotsMatchQueuedPlayersCaseInsensitively() {
+        when(playerManager.getQueuedServerNames()).thenReturn(List.of("survival"));
+        when(playerManager.getQueueForServer("survival")).thenReturn(List.of(new PlayerManager.QueuedPlayer(
+                playerId, "Tester", com.akselglyholt.velocityLimboHandler.storage.QueueTier.NORMAL)));
+
+        var snapshot = api.queue("SURVIVAL");
+
+        assertEquals("survival", snapshot.destination());
+        assertEquals(List.of(playerId), snapshot.players().stream().map(queued -> queued.playerId()).toList());
+    }
+
+    @Test
+    void disconnectBeforeArrivalDiscardsTheRerouteIntent() {
+        RegisteredServer lobby = server("lobby");
+        when(proxy.getServer("lobby")).thenReturn(Optional.of(lobby));
+        api.recordRerouteIntent(player, destination);
+
+        api.onPlayerDisconnected(player);
+        api.onPlayerArrived(player, lobby).toCompletableFuture().join();
+
+        assertEquals("lobby", api.player(playerId).orElseThrow().destination());
+    }
+
+    @Test
     void arrivalKeepsTheIntendedDestinationWhenItTemporarilyDisappears() {
         RegisteredServer fallback = server("lobby");
         when(proxy.getServer("lobby")).thenReturn(Optional.of(fallback));

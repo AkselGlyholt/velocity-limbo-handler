@@ -293,6 +293,9 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         synchronized (lock) {
             if (connectedDestination == null) {
                 detachedConnectionAttempts.values().removeIf(attempt -> attempt.player == player);
+                // A reroute intent can exist before VLH manages the player; drop it if they never arrived.
+                entryIntents.computeIfPresent(player.getUniqueId(),
+                        (ignored, intent) -> intent.player == player ? null : intent);
             }
             ManagedState state = players.get(player.getUniqueId());
             if (state == null || state.player != player) return;
@@ -759,9 +762,11 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         List<QueuedPlayerSnapshot> entries;
         List<HoldSnapshot> serverHolds;
         long snapshotRevision;
+        String queueName;
         synchronized (lock) {
-            List<PlayerManager.QueuedPlayer> queue = playerManager.getQueueForServer(serverName);
-            serverHolds = serverHoldsLocked(serverName);
+            queueName = resolveQueueName(serverName);
+            List<PlayerManager.QueuedPlayer> queue = playerManager.getQueueForServer(queueName);
+            serverHolds = serverHoldsLocked(queueName);
             snapshotRevision = revision;
             entries = new ArrayList<>(queue.size());
             int position = 1;
@@ -770,7 +775,15 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                         apiTier(queued.tier())));
             }
         }
-        return new QueueSnapshot(canonicalServerName(serverName), entries, serverHolds, snapshotRevision);
+        return new QueueSnapshot(canonicalServerName(queueName), entries, serverHolds, snapshotRevision);
+    }
+
+    /** Maps a caller's name to the exact key the reconnect queue uses, since queue lookups are case-sensitive. */
+    private String resolveQueueName(String serverName) {
+        return playerManager.getQueuedServerNames().stream()
+                .filter(serverName::equalsIgnoreCase)
+                .findFirst()
+                .orElseGet(() -> canonicalServerName(serverName));
     }
 
     private QueueSummary queueSummary(String serverName) {
