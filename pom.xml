@@ -19,7 +19,7 @@
 
     <properties>
         <!-- Single source of truth for the current plugin and API version. -->
-        <revision>2.0.0-snapshot+1</revision>
+        <revision>2.0.0</revision>
         <java.version>21</java.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
