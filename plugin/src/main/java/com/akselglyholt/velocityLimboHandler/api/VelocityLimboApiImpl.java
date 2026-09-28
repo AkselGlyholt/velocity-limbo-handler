@@ -460,6 +460,14 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         if (queued) playerManager.sendQueuePositionMessage(player);
     }
 
+    /** Returns whether VLH currently manages this exact player session. */
+    public boolean isManaged(Player player) {
+        synchronized (lock) {
+            ManagedState state = players.get(player.getUniqueId());
+            return state != null && state.player == player;
+        }
+    }
+
     public boolean isConnectionClaimed(Player player) {
         synchronized (lock) {
             ManagedState state = players.get(player.getUniqueId());

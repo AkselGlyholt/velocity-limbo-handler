@@ -84,14 +84,23 @@ class NLoginHandlerTest {
         handler.onServerPreConnect(event);
 
         verify(event, never()).setResult(any());
-        verify(playerManager, never()).addPlayer(any(), any());
     }
 
     @Test
-    void unownedRedirectIsDeniedAndRegistered() {
+    void managedPlayersRedirectIsDenied() {
+        when(api.isManaged(player)).thenReturn(true);
+
         handler.onServerPreConnect(event);
 
         verify(event).setResult(any());
-        verify(playerManager).addPlayer(player, intendedServer);
+    }
+
+    @Test
+    void unmanagedPlayerConnectsNormally() {
+        when(player.getCurrentServer()).thenReturn(Optional.empty());
+
+        handler.onServerPreConnect(event);
+
+        verify(event, never()).setResult(any());
     }
 }

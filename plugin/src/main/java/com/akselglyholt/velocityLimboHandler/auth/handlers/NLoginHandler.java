@@ -112,11 +112,11 @@ public class NLoginHandler implements AuthHandler {
             return;
         }
 
-        // Cancel NLogin's auto-redirect - queue will handle the connection
-        if (!blocker.isBlocked(player.getUniqueId())) {
+        // Cancel NLogin's post-login redirect for players VLH manages; releasing the auth hold
+        // already admitted them to the queue. Unmanaged players (e.g. auto-login before their
+        // first server connection) are left alone so they connect normally.
+        if (api.isManaged(player) && !blocker.isBlocked(player.getUniqueId())) {
             event.setResult(ServerPreConnectEvent.ServerResult.denied());
-
-            playerManager.addPlayer(player, intendedServer);
         }
     }
 
