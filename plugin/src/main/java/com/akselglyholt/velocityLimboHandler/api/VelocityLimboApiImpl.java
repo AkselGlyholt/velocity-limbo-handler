@@ -345,6 +345,22 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         }
     }
 
+    /**
+     * Returns whether player holds should reroute this player's connection into limbo. An unmanaged
+     * player's own authentication hold does not count, so they can reach the auth plugin's login server.
+     */
+    public boolean shouldRerouteHeldPlayer(Player player) {
+        expireDueLeases();
+        synchronized (lock) {
+            UUID playerId = player.getUniqueId();
+            ManagedState state = players.get(playerId);
+            if (state != null && state.player == player) return hasPlayerHoldsLocked(playerId);
+            return playerLeaseIds.getOrDefault(playerId, new LinkedHashSet<>()).stream()
+                    .map(leases::get).filter(Objects::nonNull)
+                    .anyMatch(lease -> !lease.ownerId.equals(AUTH_OWNER));
+        }
+    }
+
     public boolean isServerHeld(String serverName) {
         expireDueLeases();
         synchronized (lock) {

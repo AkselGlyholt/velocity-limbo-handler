@@ -106,7 +106,7 @@ public class NLoginHandler implements AuthHandler {
         }
 
         // ConnectionListener owns reroutes for held players and queued or held destinations.
-        if (api.isPlayerHeld(player.getUniqueId())
+        if (api.shouldRerouteHeldPlayer(player)
                 || api.isServerHeld(intendedServer.getServerInfo().getName())
                 || playerManager.hasQueuedPlayers(intendedServer)) {
             return;

@@ -477,13 +477,24 @@ class VelocityLimboApiImplTest {
 
         assertEquals(EnterStatus.CONNECTION_FAILURE, pending.toCompletableFuture().join().status());
         assertTrue(api.player(playerId).isEmpty());
-        assertTrue(api.isPlayerHeld(playerId));
+        assertTrue(api.shouldRerouteHeldPlayer(player));
 
         api.onPlayerDisconnected(player);
 
         assertFalse(api.isPlayerHeld(playerId));
         assertEquals(0, enteringOwner.releaseAllHolds().releasedCount());
         assertEquals(0, otherOwner.releaseAllHolds().releasedCount());
+    }
+
+    @Test
+    void authHoldReroutesOnlyAfterThePlayerIsManaged() {
+        api.setAuthenticationBlocked(playerId, true, "auth");
+        assertFalse(api.shouldRerouteHeldPlayer(player));
+
+        api.onPlayerArrived(player, destination).toCompletableFuture().join();
+
+        assertEquals(LimboPhase.HELD, api.player(playerId).orElseThrow().phase());
+        assertTrue(api.shouldRerouteHeldPlayer(player));
     }
 
     @Test

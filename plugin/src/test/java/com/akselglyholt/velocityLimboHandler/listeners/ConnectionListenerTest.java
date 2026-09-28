@@ -185,7 +185,7 @@ class ConnectionListenerTest {
         when(player.getUniqueId()).thenReturn(playerId);
         when(intendedServer.getServerInfo()).thenReturn(intendedInfo);
         when(intendedInfo.getName()).thenReturn("survival");
-        when(api.isPlayerHeld(playerId)).thenReturn(true);
+        when(api.shouldRerouteHeldPlayer(player)).thenReturn(true);
 
         connectionListener.onPlayerPreConnect(event);
 

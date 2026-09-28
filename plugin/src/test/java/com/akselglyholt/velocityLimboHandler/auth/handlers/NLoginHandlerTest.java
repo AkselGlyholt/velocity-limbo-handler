@@ -79,7 +79,7 @@ class NLoginHandlerTest {
 
     @Test
     void heldPlayerIsLeftForConnectionListener() {
-        when(api.isPlayerHeld(playerId)).thenReturn(true);
+        when(api.shouldRerouteHeldPlayer(player)).thenReturn(true);
 
         handler.onServerPreConnect(event);
 

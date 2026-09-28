@@ -67,7 +67,7 @@ public class ConnectionListener {
         }
 
         // Holds block the affected player or destination, including queue-bypass players.
-        if (api.isPlayerHeld(player.getUniqueId())
+        if (api.shouldRerouteHeldPlayer(player)
                 || api.isServerHeld(intendedServer.getServerInfo().getName())
                 || playerManager.hasQueuedPlayers(intendedServer)) {
             api.recordRerouteIntent(player, intendedServer);
