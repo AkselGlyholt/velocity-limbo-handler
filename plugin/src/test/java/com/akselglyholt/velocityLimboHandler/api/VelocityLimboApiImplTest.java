@@ -487,6 +487,17 @@ class VelocityLimboApiImplTest {
     }
 
     @Test
+    void staleSessionDisconnectKeepsTheNewSessionsHolds() {
+        api.setAuthenticationBlocked(playerId, true, "auth");
+        Player oldSession = mock(Player.class);
+        when(oldSession.getUniqueId()).thenReturn(playerId);
+
+        api.onPlayerDisconnected(oldSession);
+
+        assertTrue(api.isPlayerHeld(playerId));
+    }
+
+    @Test
     void reroutingToTheCurrentDestinationKeepsTheQueuePosition() {
         managePlayer();
         reset(playerManager);

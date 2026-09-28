@@ -299,8 +299,11 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
                 // A reroute intent can exist before VLH manages the player; drop it if they never arrived.
                 entryIntents.computeIfPresent(player.getUniqueId(),
                         (ignored, intent) -> intent.player == player ? null : intent);
-                // Holds can outlive managed state (e.g. a failed API entry). They end with the session.
-                if (state == null) {
+                // Holds can outlive managed state (e.g. a failed API entry). They end with the session,
+                // unless a newer session for the same UUID is already online and may own them.
+                boolean newerSessionOnline = proxy.getPlayer(player.getUniqueId())
+                        .filter(current -> current != player).isPresent();
+                if (state == null && !newerSessionOnline) {
                     List.copyOf(playerLeaseIds.getOrDefault(player.getUniqueId(), new LinkedHashSet<>()))
                             .forEach(this::removeLeaseLocked);
                 }
