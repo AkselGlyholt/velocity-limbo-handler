@@ -238,6 +238,8 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
             }
             if (state.player != player) return;
             if (state.phase == LimboPhase.CONNECTING) return;
+            // Retrying the current destination must not cost the player their queue position.
+            if (state.destination.equalsIgnoreCase(intendedServer.getServerInfo().getName())) return;
             before = snapshotLocked(player.getUniqueId());
             state.destination = intendedServer.getServerInfo().getName();
             playerManager.retargetPlayer(player, intendedServer,
@@ -291,13 +293,18 @@ public final class VelocityLimboApiImpl implements VelocityLimboApi {
         ManagedPlayerSnapshot snapshot;
         String successfulDestination = null;
         synchronized (lock) {
+            ManagedState state = players.get(player.getUniqueId());
             if (connectedDestination == null) {
                 detachedConnectionAttempts.values().removeIf(attempt -> attempt.player == player);
                 // A reroute intent can exist before VLH manages the player; drop it if they never arrived.
                 entryIntents.computeIfPresent(player.getUniqueId(),
                         (ignored, intent) -> intent.player == player ? null : intent);
+                // Holds can outlive managed state (e.g. a failed API entry). They end with the session.
+                if (state == null) {
+                    List.copyOf(playerLeaseIds.getOrDefault(player.getUniqueId(), new LinkedHashSet<>()))
+                            .forEach(this::removeLeaseLocked);
+                }
             }
-            ManagedState state = players.get(player.getUniqueId());
             if (state == null || state.player != player) return;
             if (state.connectionAttempt != 0 && connectedDestination != null
                     && state.destination.equalsIgnoreCase(connectedDestination)) {

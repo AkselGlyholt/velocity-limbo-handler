@@ -4,10 +4,8 @@ import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.auth.AuthHandler;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
-import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.proxy.server.RegisteredServer;
 import java.lang.reflect.Method;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -17,7 +15,6 @@ public class LibreLoginNextHandler implements AuthHandler {
     private final ReconnectBlocker blocker;
     private final boolean active;
     private final Logger logger = VelocityLimboHandler.getLogger();
-    private final PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
 
     public LibreLoginNextHandler(ProxyServer proxy, ReconnectBlocker blocker) {
         this.proxy = proxy;
@@ -94,7 +91,7 @@ public class LibreLoginNextHandler implements AuthHandler {
         try {
             Player player = extractPlayerFromLibreEvent(event);
             if (player != null) {
-                unblockAndRegister(player);
+                unblock(player);
                 return;
             }
 
@@ -102,29 +99,16 @@ public class LibreLoginNextHandler implements AuthHandler {
             if (playerId == null) return;
 
             blocker.unblock(playerId);
-            proxy.getPlayer(playerId).filter(Player::isActive).ifPresent(this::registerAuthenticatedPlayer);
         } catch (Exception ex) {
             logger.warning("Failed to process LibreLoginNext auth event: " + ex.getMessage());
         }
     }
 
-    private void unblockAndRegister(Player player) {
+    // Unblocking releases the auth hold; VLH then admits managed players to the queue itself.
+    private void unblock(Player player) {
         Utility.logDebug(() -> "Player " + player.getUsername()
                 + " authenticated via LibreLoginNext — unblocked.");
         blocker.unblock(player.getUniqueId());
-        if (player.isActive()) {
-            registerAuthenticatedPlayer(player);
-        }
-    }
-
-    private void registerAuthenticatedPlayer(Player player) {
-        RegisteredServer server = playerManager.getPreviousServer(player);
-        if (server == null) {
-            logger.warning("Could not register authenticated LibreLoginNext player "
-                    + player.getUsername() + ": no destination server is available");
-            return;
-        }
-        playerManager.addPlayer(player, server);
     }
 
     private UUID extractPlayerId(Object event) throws ReflectiveOperationException {

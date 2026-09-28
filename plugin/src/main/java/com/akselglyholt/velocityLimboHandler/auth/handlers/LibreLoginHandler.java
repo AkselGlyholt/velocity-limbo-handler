@@ -4,10 +4,8 @@ import com.akselglyholt.velocityLimboHandler.VelocityLimboHandler;
 import com.akselglyholt.velocityLimboHandler.auth.AuthHandler;
 import com.akselglyholt.velocityLimboHandler.misc.ReconnectBlocker;
 import com.akselglyholt.velocityLimboHandler.misc.Utility;
-import com.akselglyholt.velocityLimboHandler.storage.PlayerManager;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.proxy.server.RegisteredServer;
 import java.lang.reflect.Method;
 import java.util.logging.Logger;
 
@@ -16,7 +14,6 @@ public class LibreLoginHandler implements AuthHandler {
     private final ReconnectBlocker blocker;
     private final boolean active;
     private final Logger logger = VelocityLimboHandler.getLogger();
-    private final PlayerManager playerManager = VelocityLimboHandler.getPlayerManager();
 
     public LibreLoginHandler(ProxyServer proxy, ReconnectBlocker blocker) {
         this.proxy = proxy;
@@ -83,10 +80,8 @@ public class LibreLoginHandler implements AuthHandler {
                     Player p = extractPlayerFromLibreEvent(event);
                     if (p != null) {
                         Utility.logDebug(() -> "Player " + p.getUsername() + " authenticated via LibreLogin — unblocked.");
+                        // Unblocking releases the auth hold; VLH then admits managed players to the queue itself.
                         blocker.unblock(p.getUniqueId());
-
-                        RegisteredServer server = playerManager.getPreviousServer(p);
-                        playerManager.addPlayer(p, server);
                     } else {
                         // Fallback: try UUID path
                         Method getUser = safeMethod(event.getClass(), "getUser");

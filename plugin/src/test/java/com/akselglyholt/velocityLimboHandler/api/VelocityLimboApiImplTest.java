@@ -55,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -450,7 +451,7 @@ class VelocityLimboApiImplTest {
     }
 
     @Test
-    void failedAtomicEntryPreservesHoldsAcquiredByAnotherOwner() {
+    void failedAtomicEntryKeepsOtherOwnersHoldsUntilDisconnect() {
         LimboController enteringOwner = controller(new Object(), "entering");
         LimboController otherOwner = controller(new Object(), "other");
         RegisteredServer limbo = server("limbo");
@@ -476,8 +477,24 @@ class VelocityLimboApiImplTest {
 
         assertEquals(EnterStatus.CONNECTION_FAILURE, pending.toCompletableFuture().join().status());
         assertTrue(api.player(playerId).isEmpty());
+        assertTrue(api.isPlayerHeld(playerId));
+
+        api.onPlayerDisconnected(player);
+
+        assertFalse(api.isPlayerHeld(playerId));
         assertEquals(0, enteringOwner.releaseAllHolds().releasedCount());
-        assertEquals(1, otherOwner.releaseAllHolds().releasedCount());
+        assertEquals(0, otherOwner.releaseAllHolds().releasedCount());
+    }
+
+    @Test
+    void reroutingToTheCurrentDestinationKeepsTheQueuePosition() {
+        managePlayer();
+        reset(playerManager);
+
+        api.recordRerouteIntent(player, server("SURVIVAL"));
+
+        verify(playerManager, never()).retargetPlayer(any(), any(), anyBoolean());
+        assertEquals(LimboPhase.WAITING, api.player(playerId).orElseThrow().phase());
     }
 
     @Test
