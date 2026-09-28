@@ -30,7 +30,7 @@ Made to work with [LOOHP's Limbo](https://github.com/LOOHP/Limbo) server, but an
 
 * 🖥️ **Proxy:** Velocity (all recent versions)
 * 🎮 **MC Versions:** All versions
-* 📜 **License:** GPL-3.0
+* 📜 **License:** MIT
 
 ---
 
@@ -99,7 +99,6 @@ Pull requests are welcome! Just follow the style already in place.
 Check `CONTRIBUTING.md` for details.
 
 ---
-
 ## 📖 License
 
-Licensed under **GPL-3.0** — free to use, modify, and share under the same license.
+Licensed under **MIT**, free to use, modify, and distribute, including in closed-source projects. See [LICENSE](LICENSE) for details.
